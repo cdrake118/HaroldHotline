@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harold's Hotline — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --amber:   #f59e0b;
+      --amber-lt:#fde68a;
+      --amber-dk:#d97706;
+      --bg:      #fef3c7;
+      --surface: #ffffff;
+      --border:  #fcd34d;
+      --text:    #1c1917;
+      --muted:   #78716c;
+      --confession: #7c3aed;
+      --speak:   #0369a1;
+      --green:   #16a34a;
+      --red:     #dc2626;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, var(--amber-dk), var(--amber));
+      color: #fff;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    .paw { font-size: 2.5rem; }
+    header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; }
+    header p  { font-size: .9rem; opacity: .9; margin-top: .1rem; }
+
+    /* ── Stats ───────────────────────────────────────────────────────────── */
+    .stats {
+      display: flex;
+      gap: 1rem;
+      padding: 1.5rem 2rem;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      min-width: 130px;
+      flex: 1;
+      text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .stat-card .value { font-size: 2rem; font-weight: 800; color: var(--amber-dk); }
+    .stat-card .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: .2rem; }
+
+    /* ── Calls table ─────────────────────────────────────────────────────── */
+    .calls-section { padding: 0 2rem 2rem; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .section-header h2 { font-size: 1.1rem; font-weight: 700; }
+    .refresh-btn {
+      background: var(--amber);
+      border: none;
+      border-radius: 8px;
+      padding: .4rem .9rem;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .refresh-btn:hover { background: var(--amber-dk); }
+
+    .calls-table {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--amber-lt); }
+    th {
+      text-align: left;
+      padding: .75rem 1rem;
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--amber-dk);
+      border-bottom: 1.5px solid var(--border);
+    }
+    tbody tr {
+      border-bottom: 1px solid #fef3c7;
+      transition: background .1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fffbeb; cursor: pointer; }
+    tbody tr.expanded { background: #fffbeb; }
+    td { padding: .75rem 1rem; font-size: .9rem; vertical-align: middle; }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: .2rem .65rem;
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .badge-confession { background: #ede9fe; color: var(--confession); }
+    .badge-speak      { background: #e0f2fe; color: var(--speak); }
+    .badge-unknown    { background: #f3f4f6; color: var(--muted); }
+
+    .ts-status {
+      font-size: .75rem;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+    }
+    .ts-completed { background: #dcfce7; color: var(--green); }
+    .ts-pending   { background: #fef9c3; color: #a16207; }
+    .ts-failed    { background: #fee2e2; color: var(--red); }
+    .ts-none      { background: #f3f4f6; color: var(--muted); }
+
+    /* ── Expanded detail row ─────────────────────────────────────────────── */
+    .detail-row { display: none; }
+    .detail-row.open { display: table-row; }
+    .detail-cell {
+      padding: 1rem 1.5rem 1.25rem;
+      background: #fffbeb;
+      border-bottom: 1.5px solid var(--border);
+    }
+    .detail-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 640px) { .detail-inner { grid-template-columns: 1fr; } }
+
+    .detail-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+    .detail-box h3 { font-size: .8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .6rem; }
+
+    .transcript-text {
+      font-size: .9rem;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .no-transcript { color: var(--muted); font-style: italic; font-size: .9rem; }
+
+    audio { width: 100%; margin-top: .4rem; border-radius: 6px; }
+
+    /* ── Empty / loading ─────────────────────────────────────────────────── */
+    .empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .empty .cat { font-size: 3rem; display: block; margin-bottom: .75rem; }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Pagination ──────────────────────────────────────────────────────── */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: .5rem;
+      margin-top: 1rem;
+    }
+    .page-btn {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: .4rem .9rem;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .page-btn:hover:not(:disabled) { background: var(--amber-lt); border-color: var(--amber); }
+    .page-btn:disabled { opacity: .4; cursor: default; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="paw">🐱</div>
+  <div>
+    <h1>Harold's Hotline</h1>
+    <p>Call center dashboard — all confessions &amp; conversations logged here</p>
+  </div>
+</header>
+
+<section class="stats" id="stats">
+  <div class="stat-card"><div class="value" id="stat-total">—</div><div class="label">Total Calls</div></div>
+  <div class="stat-card"><div class="value" id="stat-confessions">—</div><div class="label">Confessions</div></div>
+  <div class="stat-card"><div class="value" id="stat-speak">—</div><div class="label">Spoke to Harold</div></div>
+  <div class="stat-card"><div class="value" id="stat-recordings">—</div><div class="label">Recordings</div></div>
+</section>
+
+<section class="calls-section">
+  <div class="section-header">
+    <h2>Recent Calls</h2>
+    <button class="refresh-btn" onclick="loadCalls(currentOffset)">↻ Refresh</button>
+  </div>
+
+  <div class="calls-table">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date &amp; Time</th>
+          <th>Caller</th>
+          <th>Type</th>
+          <th>Duration</th>
+          <th>Transcript</th>
+        </tr>
+      </thead>
+      <tbody id="calls-body">
+        <tr><td colspan="6" class="loading">Loading calls…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    <button class="page-btn" id="btn-prev" onclick="prevPage()" disabled>← Previous</button>
+    <button class="page-btn" id="btn-next" onclick="nextPage()" disabled>Next →</button>
+  </div>
+</section>
+
+<script>
+  const PAGE_SIZE = 25;
+  let currentOffset = 0;
+  let totalCalls = 0;
+
+  function maskNumber(num) {
+    if (!num) return '—';
+    if (num.length <= 4) return num;
+    return num.slice(0, num.length - 4).replace(/\d/g, '•') + num.slice(-4);
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function formatDuration(secs) {
+    if (!secs) return '—';
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  function typeBadge(type) {
+    if (type === 'confession') return '<span class="badge badge-confession">🗣 Confession</span>';
+    if (type === 'speak')      return '<span class="badge badge-speak">😺 Spoke to Harold</span>';
+    return '<span class="badge badge-unknown">?</span>';
+  }
+
+  function transcriptBadge(status) {
+    const map = {
+      completed: '<span class="ts-status ts-completed">✓ Ready</span>',
+      pending:   '<span class="ts-status ts-pending">⏳ Pending</span>',
+      failed:    '<span class="ts-status ts-failed">✗ Failed</span>',
+      none:      '<span class="ts-status ts-none">—</span>',
+    };
+    return map[status] || map.none;
+  }
+
+  async function loadStats() {
+    const res = await fetch('/dashboard/api/stats');
+    if (!res.ok) return;
+    const s = await res.json();
+    document.getElementById('stat-total').textContent      = s.total ?? 0;
+    document.getElementById('stat-confessions').textContent = s.confessions ?? 0;
+    document.getElementById('stat-speak').textContent      = s.speak_calls ?? 0;
+    document.getElementById('stat-recordings').textContent = s.recordings ?? 0;
+  }
+
+  async function loadCalls(offset = 0) {
+    currentOffset = offset;
+    const tbody = document.getElementById('calls-body');
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading…</td></tr>';
+
+    const res = await fetch(`/dashboard/api/calls?limit=${PAGE_SIZE}&offset=${offset}`);
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty"><span class="cat">😿</span>Failed to load calls.</td></tr>';
+      return;
+    }
+    const { calls, total } = await res.json();
+    totalCalls = total;
+
+    document.getElementById('btn-prev').disabled = offset === 0;
+    document.getElementById('btn-next').disabled = offset + PAGE_SIZE >= total;
+
+    if (!calls.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty"><span class="cat">😴</span>No calls yet — Harold is still napping.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = calls.map((call, i) => `
+      <tr onclick="toggleDetail(${call.id})" id="row-${call.id}">
+        <td>${offset + i + 1}</td>
+        <td>${formatDate(call.created_at)}</td>
+        <td style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}</td>
+        <td>${typeBadge(call.call_type)}</td>
+        <td>${formatDuration(call.duration)}</td>
+        <td>${transcriptBadge(call.transcript_status)}</td>
+      </tr>
+      <tr class="detail-row" id="detail-${call.id}">
+        <td colspan="6" class="detail-cell">
+          <div class="detail-inner">
+            <div class="detail-box">
+              <h3>Transcript</h3>
+              ${call.transcript
+                ? `<p class="transcript-text">${escapeHtml(call.transcript)}</p>`
+                : `<p class="no-transcript">No transcript available${call.transcript_status === 'pending' ? ' yet — check back soon.' : '.'}</p>`
+              }
+            </div>
+            <div class="detail-box">
+              <h3>Recording</h3>
+              ${call.recording_sid
+                ? `<audio controls src="/dashboard/api/calls/${call.id}/recording"></audio>`
+                : '<p class="no-transcript">No recording for this call.</p>'
+              }
+              <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)">
+                <div><strong>Call SID:</strong> ${escapeHtml(call.call_sid || '—')}</div>
+                <div><strong>Status:</strong> ${escapeHtml(call.call_status || '—')}</div>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function toggleDetail(id) {
+    const row = document.getElementById(`row-${id}`);
+    const detail = document.getElementById(`detail-${id}`);
+    const open = detail.classList.toggle('open');
+    if (open) {
+      row.classList.add('expanded');
+    } else {
+      row.classList.remove('expanded');
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function prevPage() { if (currentOffset >= PAGE_SIZE) loadCalls(currentOffset - PAGE_SIZE); }
+  function nextPage() { if (currentOffset + PAGE_SIZE < totalCalls) loadCalls(currentOffset + PAGE_SIZE); }
+
+  // Auto-refresh every 30s
+  loadStats();
+  loadCalls(0);
+  setInterval(() => { loadStats(); loadCalls(currentOffset); }, 30000);
+</script>
+</body>
+</html>

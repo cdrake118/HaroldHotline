@@ -1,0 +1,20 @@
+{
+  "name": "harold-hotline",
+  "version": "1.0.0",
+  "description": "Harold's Cat Hotline - powered by Twilio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0",
+    "twilio": "^5.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.3"
+  }
+}
