@@ -40,12 +40,18 @@ router.post('/incoming', (req, res) => {
 router.post('/menu', (req, res) => {
   const { Digits, CallSid, From } = req.body;
 
+  const respond = (twiml) => { res.type('text/xml'); res.send(twiml.toString()); };
+
   if (Digits === '1') {
     db.upsertCall(CallSid, From, 'confession');
-    res.redirect(307, `${config.baseUrl}/voice/confession`);
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/confession`);
+    respond(twiml);
   } else if (Digits === '2') {
     db.upsertCall(CallSid, From, 'speak');
-    res.redirect(307, `${config.baseUrl}/voice/speak`);
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/speak`);
+    respond(twiml);
   } else {
     const twiml = new twilio.twiml.VoiceResponse();
     const gather = twiml.gather({
