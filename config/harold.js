@@ -11,7 +11,7 @@ const config = {
   baseUrl: (process.env.BASE_URL || '').replace(/\/$/, ''),
 
   // TTS voice — any Twilio/Polly voice name
-  announcerVoice: 'Polly.Joanna',
+  announcerVoice: 'Polly.Brian-Neural',
 
   // Harold's socials
   haroldInstagram: process.env.HAROLD_INSTAGRAM || null,
