@@ -39,13 +39,15 @@ app.get('/', (req, res) => {
 
   const ig = config.haroldInstagram;
   const tt = config.haroldTikTok;
-  const igSlug = ig ? ig.replace(/\s+/g, '') : '';
-  const ttSlug = tt ? tt.replace(/\s+/g, '') : '';
-  const socialsHtml = (ig || tt) ? `
-    <div class="socials">
-      ${ig ? `<a class="social-btn" href="https://www.instagram.com/${igSlug}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
-      ${tt ? `<a class="social-btn" href="https://www.tiktok.com/@${ttSlug}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
-    </div>` : '';
+  const igSlug = ig ? ig.replace(/\s+/g, '').replace(/^@/, '') : '';
+  const ttSlug = tt ? tt.replace(/\s+/g, '').replace(/^@/, '') : '';
+  const igGlyph = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align:middle;flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>`;
+  const ttGlyph = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;flex-shrink:0"><path d="M16.5 3c.4 2.4 1.9 4 4.5 4.3v3.1c-1.6.1-3.1-.3-4.5-1.1v6.6c0 4-3.3 6.4-6.5 6.1-3-.3-5.4-2.7-5.5-5.7-.1-3.1 2.4-5.7 5.5-5.9.5 0 1 0 1.5.1v3.2c-.5-.2-1-.3-1.5-.3-1.5.1-2.7 1.3-2.7 2.8 0 1.5 1.2 2.8 2.7 2.8 1.5 0 2.7-1.2 2.7-2.8V3h3.8z"/></svg>`;
+  const socialParts = [];
+  if (ig) socialParts.push(`<a href="https://www.instagram.com/${igSlug}" target="_blank" rel="noopener">${igGlyph} @${igSlug}</a>`);
+  if (ig && tt) socialParts.push(`<span class="social-star">★</span>`);
+  if (tt) socialParts.push(`<a href="https://www.tiktok.com/@${ttSlug}" target="_blank" rel="noopener">${ttGlyph} @${ttSlug}</a>`);
+  const socialsHtml = socialParts.length ? `<div class="socials-bar">${socialParts.join('')}</div>` : '';
 
   const html = template
     .replace('{{HAROLD_PHOTO}}', haroldPhoto)
