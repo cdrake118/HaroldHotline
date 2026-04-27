@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const fetch = require('node-fetch');
 const config = require('../config/harold');
 const db = require('../db');
@@ -9,6 +10,33 @@ const router = express.Router();
 // ── Dashboard page ────────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'dashboard.html'));
+});
+
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+router.get('/api/debug', (req, res) => {
+  const audioDir = process.env.AUDIO_DIR || path.join(__dirname, '..', 'public', 'audio');
+  let audioFiles = [];
+  try { audioFiles = fs.readdirSync(audioDir); } catch (e) { audioFiles = [`ERROR: ${e.message}`]; }
+
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'harold.db');
+  let dbExists = false;
+  try { dbExists = fs.existsSync(dbPath); } catch (e) {}
+
+  res.json({
+    audioDir,
+    audioFiles,
+    dbPath,
+    dbExists,
+    env: {
+      BASE_URL: process.env.BASE_URL || '(not set)',
+      AUDIO_DIR: process.env.AUDIO_DIR || '(not set — using default)',
+      DB_PATH: process.env.DB_PATH || '(not set — using default)',
+      HOLD_MUSIC_URL: process.env.HOLD_MUSIC_URL || '(not set)',
+      HAROLD_MEOWING_SHORT_URL: process.env.HAROLD_MEOWING_SHORT_URL || '(not set)',
+      HAROLD_MEOWING_LONG_URL: process.env.HAROLD_MEOWING_LONG_URL || '(not set)',
+      PORT: process.env.PORT || '(not set)',
+    },
+  });
 });
 
 // ── REST API ──────────────────────────────────────────────────────────────────
