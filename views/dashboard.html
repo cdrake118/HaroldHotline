@@ -188,6 +188,45 @@
     tr.flagged-row td { background: #fff1f2; }
     tr.flagged-row:hover td { background: #ffe4e6; }
 
+    /* ── Generated post ──────────────────────────────────────────────────── */
+    .generated-post {
+      margin-top: 1rem;
+      padding: .75rem 1rem;
+      background: #fefce8;
+      border: 1.5px solid #fde68a;
+      border-radius: 10px;
+      font-size: .875rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .post-actions {
+      display: flex;
+      gap: .5rem;
+      margin-top: .5rem;
+    }
+
+    /* ── Voiceover tool ──────────────────────────────────────────────────── */
+    .voiceover-section { margin: 1.5rem auto; max-width: 960px; padding: 0 1rem; }
+    .vo-body { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-top: .75rem; }
+    .vo-body textarea {
+      width: 100%; min-height: 90px; padding: .6rem .8rem;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: .9rem; resize: vertical;
+    }
+    .vo-body textarea:focus { outline: none; border-color: var(--amber); }
+    .vo-row { display: flex; gap: .6rem; margin-top: .6rem; flex-wrap: wrap; align-items: center; }
+    .vo-row select {
+      padding: .4rem .7rem; border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: .85rem; background: var(--surface); cursor: pointer;
+    }
+    .vo-generate { background: var(--amber); border: none; border-radius: 8px; padding: .4rem 1rem; font-size: .85rem; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .vo-generate:hover { background: var(--amber-dk); }
+    .vo-generate:disabled { opacity: .5; cursor: default; }
+    .vo-result { margin-top: 1rem; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .vo-result audio { flex: 1; min-width: 200px; }
+    .vo-download { font-size: .85rem; padding: .4rem .8rem; background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text); cursor: pointer; }
+    .vo-download:hover { background: var(--amber-lt); border-color: var(--amber); }
+
     /* ── Admin buttons ───────────────────────────────────────────────────── */
     .admin-actions {
       display: flex;
@@ -247,6 +286,35 @@
   <div class="stat-card"><div class="value" id="stat-questions">—</div><div class="label">Questions</div></div>
   <div class="stat-card"><div class="value" id="stat-wisdom">—</div><div class="label">Wisdom Seekers</div></div>
   <div class="stat-card"><div class="value" id="stat-recordings">—</div><div class="label">Recordings</div></div>
+</section>
+
+<section class="voiceover-section">
+  <div class="section-header">
+    <h2>Voiceover Generator</h2>
+    <button class="refresh-btn" onclick="toggleVoiceover()">↕ Show / Hide</button>
+  </div>
+  <div class="vo-body" id="vo-panel" style="display:none">
+    <textarea id="vo-text" placeholder="Enter the text you'd like Harold's announcer to read…"></textarea>
+    <div class="vo-row">
+      <select id="vo-voice">
+        <option value="fable">Fable — British male (closest to Harold's announcer)</option>
+        <option value="onyx">Onyx — Deep male</option>
+        <option value="echo">Echo — Male</option>
+        <option value="alloy">Alloy — Neutral</option>
+        <option value="nova">Nova — Female</option>
+        <option value="shimmer">Shimmer — Soft female</option>
+      </select>
+      <select id="vo-model">
+        <option value="tts-1-hd">HD quality</option>
+        <option value="tts-1">Standard</option>
+      </select>
+      <button class="vo-generate" id="vo-btn" onclick="generateVoiceover()">🎙 Generate</button>
+    </div>
+    <div class="vo-result" id="vo-result" style="display:none">
+      <audio id="vo-player" controls></audio>
+      <a id="vo-download" class="vo-download" download="harold-voiceover.mp3">⬇ Download MP3</a>
+    </div>
+  </div>
 </section>
 
 <section class="calls-section">
@@ -452,7 +520,9 @@
               🚩 ${call.flagged ? 'Unflag' : 'Flag'} call
             </button>
             ${call.recording_sid ? `<button class="admin-btn danger" onclick="event.stopPropagation();adminDeleteRecording(${call.id})">🗑 Delete recording</button>` : ''}
+            ${call.transcript ? `<button class="admin-btn" onclick="event.stopPropagation();generatePost(${call.id})">✨ Generate post</button>` : ''}
           </div>
+          <div id="post-${call.id}" style="display:none"></div>
         </td>
       </tr>
     `).join('');
@@ -480,6 +550,48 @@
   function prevPage() { if (currentOffset >= PAGE_SIZE) loadCalls(currentOffset - PAGE_SIZE); }
   function nextPage() { if (currentOffset + PAGE_SIZE < totalCalls) loadCalls(currentOffset + PAGE_SIZE); }
 
+  // ── Voiceover ─────────────────────────────────────────────────────────────
+  function toggleVoiceover() {
+    const panel = document.getElementById('vo-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+
+  async function generateVoiceover() {
+    const text  = document.getElementById('vo-text').value.trim();
+    const voice = document.getElementById('vo-voice').value;
+    const model = document.getElementById('vo-model').value;
+    if (!text) { alert('Please enter some text first.'); return; }
+
+    const btn = document.getElementById('vo-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    document.getElementById('vo-result').style.display = 'none';
+
+    const res = await adminFetch('/dashboard/api/voiceover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice, model }),
+    });
+
+    btn.disabled = false;
+    btn.textContent = '🎙 Generate';
+
+    if (!res || !res.ok) {
+      const err = await res?.json().catch(() => ({}));
+      alert(err.error || 'Failed to generate voiceover.');
+      return;
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const player   = document.getElementById('vo-player');
+    const download = document.getElementById('vo-download');
+    player.src   = url;
+    download.href = url;
+    document.getElementById('vo-result').style.display = 'flex';
+    player.play();
+  }
+
   // ── Admin ─────────────────────────────────────────────────────────────────
   function adminHeaders() {
     const pass = sessionStorage.getItem('adminPass');
@@ -497,6 +609,26 @@
       res = await fetch(url, options);
     }
     return res;
+  }
+
+  async function generatePost(id) {
+    const container = document.getElementById(`post-${id}`);
+    container.style.display = 'block';
+    container.innerHTML = '<p style="font-size:.85rem;color:var(--muted)">✨ Harold is consulting his inner wisdom…</p>';
+    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-post`, { method: 'POST' });
+    if (!res) { container.style.display = 'none'; return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      container.innerHTML = `<p style="font-size:.85rem;color:var(--red)">${escapeHtml(err.error || 'Failed to generate post.')}</p>`;
+      return;
+    }
+    const { post } = await res.json();
+    container.innerHTML = `
+      <div class="generated-post">${escapeHtml(post)}</div>
+      <div class="post-actions">
+        <button class="admin-btn" onclick="navigator.clipboard.writeText(${JSON.stringify(post)}).then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
+        <button class="admin-btn" onclick="generatePost(${id})">↻ Regenerate</button>
+      </div>`;
   }
 
   async function adminFlagCall(id) {

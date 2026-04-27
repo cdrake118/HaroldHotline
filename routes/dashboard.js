@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const fetch = require('node-fetch');
+const { OpenAI } = require('openai');
 const config = require('../config/harold');
 const db = require('../db');
 
@@ -101,6 +102,72 @@ router.get('/api/calls/:id/recording', async (req, res) => {
   } catch (err) {
     console.error('Recording proxy error:', err);
     res.status(500).json({ error: 'Internal error fetching recording' });
+  }
+});
+
+// ── Voiceover generator ───────────────────────────────────────────────────────
+router.post('/api/voiceover', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY is not configured' });
+  }
+  const { text, voice = 'fable', model = 'tts-1-hd' } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Text is required' });
+
+  const allowedVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+  const allowedModels = ['tts-1', 'tts-1-hd'];
+  if (!allowedVoices.includes(voice)) return res.status(400).json({ error: 'Invalid voice' });
+  if (!allowedModels.includes(model)) return res.status(400).json({ error: 'Invalid model' });
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const mp3 = await openai.audio.speech.create({ model, voice, input: text.trim() });
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Content-Disposition', 'attachment; filename="harold-voiceover.mp3"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('Voiceover error:', err);
+    res.status(500).json({ error: 'Failed to generate voiceover' });
+  }
+});
+
+// ── Generate social post ──────────────────────────────────────────────────────
+const TYPE_LABELS = {
+  confession: 'confession',
+  question:   'question',
+  speak:      'message',
+};
+
+router.post('/api/calls/:id/generate-post', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY is not configured' });
+  }
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+  if (!call.transcript) return res.status(400).json({ error: 'No transcript available for this call' });
+
+  const typeLabel = TYPE_LABELS[call.call_type] || 'message';
+  const prompt =
+    `You are the social media manager for Harold's Hotline — a phone hotline where people call to talk to Harold, a very judgmental tabby cat. Harold cannot speak; he only meows.\n\n` +
+    `A caller left the following ${typeLabel}:\n"${call.transcript}"\n\n` +
+    `Write a short, charming, and funny Instagram/TikTok caption about this. Rules:\n` +
+    `- Keep it under 150 words\n` +
+    `- If the caller used their real name, replace it with "a caller" or "someone"\n` +
+    `- Write from the perspective of Harold's social media team\n` +
+    `- Include Harold's implied cat reaction (unimpressed, napping, mildly judgmental)\n` +
+    `- End with 3-5 hashtags including #HaroldsHotline and #HaroldTheCat`;
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 300,
+    });
+    res.json({ post: completion.choices[0].message.content });
+  } catch (err) {
+    console.error('Generate post error:', err);
+    res.status(500).json({ error: 'Failed to generate post' });
   }
 });
 

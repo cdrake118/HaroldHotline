@@ -1,5 +1,7 @@
 const express = require('express');
 const twilio = require('twilio');
+const fetch = require('node-fetch');
+const { OpenAI, toFile } = require('openai');
 const config = require('../config/harold');
 const db = require('../db');
 
@@ -101,8 +103,6 @@ router.post('/confession', (req, res) => {
     action: `${config.baseUrl}/voice/confession/complete`,
     recordingStatusCallback: `${config.baseUrl}/voice/recording-status`,
     recordingStatusCallbackMethod: 'POST',
-    transcribe: true,
-    transcribeCallback: `${config.baseUrl}/voice/transcription`,
   });
 
   res.type('text/xml');
@@ -236,8 +236,6 @@ router.post('/question', (req, res) => {
     action: `${config.baseUrl}/voice/question/complete`,
     recordingStatusCallback: `${config.baseUrl}/voice/recording-status`,
     recordingStatusCallbackMethod: 'POST',
-    transcribe: true,
-    transcribeCallback: `${config.baseUrl}/voice/transcription`,
   });
 
   res.type('text/xml');
@@ -261,11 +259,35 @@ router.post('/question/complete', (req, res) => {
 
 // ── Async callbacks from Twilio ───────────────────────────────────────────────
 
+async function transcribeWithWhisper(callSid, recordingSid) {
+  if (!process.env.OPENAI_API_KEY) return;
+  try {
+    db.updateTranscript(callSid, '', 'pending');
+    const audioUrl =
+      `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}` +
+      `/Recordings/${recordingSid}.mp3`;
+    const credentials = Buffer.from(`${config.accountSid}:${config.authToken}`).toString('base64');
+    const audioRes = await fetch(audioUrl, { headers: { Authorization: `Basic ${credentials}` } });
+    if (!audioRes.ok) throw new Error(`Twilio audio fetch failed: ${audioRes.status}`);
+    const audioBuffer = await audioRes.buffer();
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const result = await openai.audio.transcriptions.create({
+      file: await toFile(audioBuffer, `${recordingSid}.mp3`, { type: 'audio/mpeg' }),
+      model: 'whisper-1',
+    });
+    db.updateTranscript(callSid, result.text, 'completed');
+  } catch (err) {
+    console.error('Whisper transcription error:', err);
+    db.updateTranscript(callSid, '', 'failed');
+  }
+}
+
 // Fires when recording status changes (completed, failed)
 router.post('/recording-status', (req, res) => {
   const { CallSid, RecordingSid, RecordingUrl, RecordingStatus } = req.body;
   if (RecordingStatus === 'completed' && CallSid && RecordingSid) {
     db.updateRecording(CallSid, RecordingUrl, RecordingSid);
+    transcribeWithWhisper(CallSid, RecordingSid);
   }
   res.sendStatus(204);
 });
