@@ -194,6 +194,47 @@
       .menu-hint { display: none; }
     }
 
+    /* ── Stats ── */
+    .stats-block {
+      margin-top: 24px;
+      padding: 0 clamp(0px, 4vw, 40px);
+    }
+    .stats-header {
+      font-size: clamp(10px, 1.8vw, 13px);
+      letter-spacing: .45em;
+      color: #ff3d8b;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    @media (min-width: 480px) {
+      .stats-grid { grid-template-columns: repeat(5, 1fr); }
+    }
+    .stat-item {
+      text-align: center;
+      padding: 10px 8px;
+      border: 1px dotted rgba(184,157,255,.35);
+      border-radius: 6px;
+    }
+    .stat-num {
+      font-size: clamp(28px, 6vw, 42px);
+      line-height: 1;
+      color: #ffd84d;
+      text-shadow: 0 0 16px rgba(255,216,77,.4);
+    }
+    .stat-label {
+      font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+      font-style: italic;
+      font-size: clamp(11px, 1.8vw, 14px);
+      color: #b89dff;
+      margin-top: 2px;
+      line-height: 1.2;
+    }
+
     /* ── Footer area (socials + website + disclaimer) ── */
     .footer-area {
       margin-top: 36px;
@@ -266,7 +307,7 @@
 <div class="poster">
 
   <!-- Eyebrow -->
-  <div class="eyebrow">★ ★ ★ &nbsp; LIVE · SOMETIMES CONFIDENTIAL · FELINE &nbsp; ★ ★ ★</div>
+  <div class="eyebrow">★&nbsp;★&nbsp;★ &nbsp; LIVE · SOMETIMES CONFIDENTIAL · FELINE &nbsp; ★&nbsp;★&nbsp;★</div>
 
   <!-- Title -->
   <div class="title-block">
@@ -318,6 +359,33 @@
     </div>
   </div>
 
+  <!-- Harold's call stats -->
+  <div class="stats-block">
+    <div class="stats-header">· · ·  THE HAROLD REPORT  · · ·</div>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-num" id="stat-total">—</div>
+        <div class="stat-label">Total Calls</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-confessions">—</div>
+        <div class="stat-label">Confessions</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-speak">—</div>
+        <div class="stat-label">Spoke to Harold</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-questions">—</div>
+        <div class="stat-label">Questions Asked</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="stat-wisdom">—</div>
+        <div class="stat-label">Wisdoms Given</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer: socials + website + disclaimer -->
   <div class="footer-area">
     {{SOCIALS}}
@@ -343,6 +411,17 @@
     line.setAttribute('opacity', '0.25');
     raysEl.appendChild(line);
   }
+
+  // Load live call stats
+  fetch('/api/stats').then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = (val || 0).toLocaleString(); };
+    set('stat-total',       s.total);
+    set('stat-confessions', s.confessions);
+    set('stat-speak',       s.speak_calls);
+    set('stat-questions',   s.questions);
+    set('stat-wisdom',      s.wisdom_calls);
+  }).catch(() => {});
 
   // Populate SVG background: 40 scattered star dots
   const starsEl = document.getElementById('stars');

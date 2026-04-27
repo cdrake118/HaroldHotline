@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const config = require('./config/harold');
+const db = require('./db');
 
 const app = express();
 
@@ -22,6 +23,15 @@ app.use('/dashboard', require('./routes/dashboard'));
 
 // Health check for Railway
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Public stats — aggregate call counts only, no sensitive data
+app.get('/api/stats', (req, res) => {
+  try {
+    res.json(db.stats());
+  } catch (err) {
+    res.status(500).json({ error: 'unavailable' });
+  }
+});
 
 // Public landing page
 app.get('/', (req, res) => {
