@@ -245,6 +245,7 @@
   <div class="stat-card"><div class="value" id="stat-confessions">—</div><div class="label">Confessions</div></div>
   <div class="stat-card"><div class="value" id="stat-speak">—</div><div class="label">Spoke to Harold</div></div>
   <div class="stat-card"><div class="value" id="stat-questions">—</div><div class="label">Questions</div></div>
+  <div class="stat-card"><div class="value" id="stat-wisdom">—</div><div class="label">Wisdom Seekers</div></div>
   <div class="stat-card"><div class="value" id="stat-recordings">—</div><div class="label">Recordings</div></div>
 </section>
 
@@ -390,6 +391,7 @@
     document.getElementById('stat-confessions').textContent = s.confessions ?? 0;
     document.getElementById('stat-speak').textContent       = s.speak_calls ?? 0;
     document.getElementById('stat-questions').textContent   = s.questions ?? 0;
+    document.getElementById('stat-wisdom').textContent      = s.wisdom_calls ?? 0;
     document.getElementById('stat-recordings').textContent  = s.recordings ?? 0;
   }
 

@@ -93,6 +93,7 @@ const stmts = {
       SUM(CASE WHEN call_type = 'confession' THEN 1 ELSE 0 END) as confessions,
       SUM(CASE WHEN call_type = 'speak'      THEN 1 ELSE 0 END) as speak_calls,
       SUM(CASE WHEN call_type = 'question'   THEN 1 ELSE 0 END) as questions,
+      SUM(CASE WHEN call_type = 'wisdom'     THEN 1 ELSE 0 END) as wisdom_calls,
       SUM(CASE WHEN recording_url IS NOT NULL THEN 1 ELSE 0 END) as recordings
     FROM calls
   `),
