@@ -38,6 +38,9 @@ const config = {
     'Press 3 to ask Harold a question. ' +
     'Press 4 for words of wisdom from Harold.',
 
+  recordingDisclosure:
+    "Please note, this call may be recorded for Harold's personal archives. He's very thorough for a cat.",
+
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
 

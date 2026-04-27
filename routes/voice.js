@@ -28,6 +28,7 @@ router.post('/incoming', (req, res) => {
     method: 'POST',
     timeout: 10,
   });
+  gather.say({ voice: config.announcerVoice }, config.recordingDisclosure);
   gather.say({ voice: config.announcerVoice }, config.greeting);
 
   // Fallback if caller doesn't press anything

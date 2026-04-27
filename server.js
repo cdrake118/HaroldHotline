@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const config = require('./config/harold');
 
 const app = express();
@@ -19,8 +20,36 @@ app.use('/dashboard', require('./routes/dashboard'));
 // Health check for Railway
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// Root redirect → dashboard
-app.get('/', (req, res) => res.redirect('/dashboard'));
+// Public landing page
+app.get('/', (req, res) => {
+  const template = fs.readFileSync(path.join(__dirname, 'views', 'landing.html'), 'utf8');
+
+  const raw = config.phoneNumber || '';
+  const digits = raw.replace(/\D/g, '');
+  const phoneDisplay = digits.length === 11 && digits.startsWith('1')
+    ? `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`
+    : raw;
+
+  const haroldPhoto = process.env.HAROLD_PHOTO_URL
+    ? `<img src="${process.env.HAROLD_PHOTO_URL}" alt="Harold">`
+    : '🐱';
+
+  const ig = config.haroldInstagram;
+  const tt = config.haroldTikTok;
+  const socialsHtml = (ig || tt) ? `
+    <div class="socials">
+      ${ig ? `<a class="social-btn" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
+      ${tt ? `<a class="social-btn" href="https://tiktok.com/@${tt}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
+    </div>` : '';
+
+  const html = template
+    .replace('{{HAROLD_PHOTO}}', haroldPhoto)
+    .replace('{{PHONE_RAW}}', raw)
+    .replace('{{PHONE_DISPLAY}}', phoneDisplay)
+    .replace('{{SOCIALS}}', socialsHtml);
+
+  res.type('text/html').send(html);
+});
 
 // Return a TwiML error response so Twilio logs something useful instead of a blank 500
 app.use((err, req, res, next) => {

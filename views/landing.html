@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harold's Hotline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --amber:    #f59e0b;
+      --amber-lt: #fde68a;
+      --amber-dk: #d97706;
+      --bg:       #fef3c7;
+      --surface:  #ffffff;
+      --border:   #fcd34d;
+      --text:     #1c1917;
+      --muted:    #78716c;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 520px;
+      padding: 2.5rem 1.5rem 2rem;
+      gap: 1.5rem;
+    }
+
+    /* ── Harold photo ── */
+    .harold-photo {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 4px solid var(--amber);
+      overflow: hidden;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5rem;
+      box-shadow: 0 4px 24px rgba(245,158,11,.25);
+    }
+    .harold-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── Title ── */
+    .title-block { text-align: center; }
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      color: var(--text);
+    }
+    .tagline {
+      margin-top: .4rem;
+      font-size: 1rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Phone number ── */
+    .phone-wrap { text-align: center; }
+    .phone-label {
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .35rem;
+    }
+    .phone-number {
+      display: inline-block;
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      color: var(--amber-dk);
+      text-decoration: none;
+      background: var(--surface);
+      border: 2.5px solid var(--border);
+      border-radius: 16px;
+      padding: .5rem 1.5rem;
+      box-shadow: 0 2px 12px rgba(245,158,11,.15);
+      transition: background .15s, border-color .15s;
+    }
+    .phone-number:hover { background: var(--amber-lt); border-color: var(--amber); }
+
+    /* ── Options ── */
+    .options {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .option {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .85rem 1.25rem;
+      font-size: .95rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .option:last-child { border-bottom: none; }
+    .option-num {
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      background: var(--amber-lt);
+      color: var(--amber-dk);
+      font-weight: 700;
+      font-size: .8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .option-text { color: var(--text); }
+
+    /* ── Socials ── */
+    .socials {
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .social-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .5rem 1.1rem;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 999px;
+      font-size: .875rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      transition: background .15s, border-color .15s;
+    }
+    .social-btn:hover { background: var(--amber-lt); border-color: var(--amber); }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: auto;
+      padding: 1.25rem 1.5rem 2rem;
+      text-align: center;
+      font-size: .8rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<main>
+  <div class="harold-photo">
+    {{HAROLD_PHOTO}}
+  </div>
+
+  <div class="title-block">
+    <h1>Harold's Hotline</h1>
+    <p class="tagline">The world's only cat-staffed telephone service.</p>
+  </div>
+
+  <div class="phone-wrap">
+    <p class="phone-label">Call Harold</p>
+    <a class="phone-number" href="tel:{{PHONE_RAW}}">{{PHONE_DISPLAY}}</a>
+  </div>
+
+  <div class="options">
+    <div class="option"><span class="option-num">1</span><span class="option-text">Leave Harold a confession</span></div>
+    <div class="option"><span class="option-num">2</span><span class="option-text">Speak to Harold directly</span></div>
+    <div class="option"><span class="option-num">3</span><span class="option-text">Ask Harold a question</span></div>
+    <div class="option"><span class="option-num">4</span><span class="option-text">Receive words of wisdom from Harold</span></div>
+  </div>
+
+  {{SOCIALS}}
+</main>
+
+<footer>
+  Harold is available 24 hours a day, 7 days a week.<br>
+  Response times may vary depending on nap schedule.
+</footer>
+
+</body>
+</html>
