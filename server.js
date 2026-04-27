@@ -8,8 +8,9 @@ const app = express();
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// Serve Harold audio files and any other static assets
-app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
+// Serve Harold audio files — AUDIO_DIR env var overrides the default for production
+const audioDir = process.env.AUDIO_DIR || path.join(__dirname, 'public', 'audio');
+app.use('/audio', express.static(audioDir));
 
 // Routes
 app.use('/voice', require('./routes/voice'));
