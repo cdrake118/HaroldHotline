@@ -253,9 +253,7 @@
   let totalCalls = 0;
 
   function maskNumber(num) {
-    if (!num) return '—';
-    if (num.length <= 4) return num;
-    return num.slice(0, num.length - 4).replace(/\d/g, '•') + num.slice(-4);
+    return num || '—';
   }
 
   function formatDate(iso) {
