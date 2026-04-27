@@ -33,13 +33,13 @@ const config = {
 
   greeting:
     "Thank you for calling Harold's Hotline. " +
-    'Press 1 for confessions. ' +
+    'Press 1 to leave Harold a confession. ' +
     'Press 2 to speak to Harold. ' +
     'Press 3 to ask Harold a question. ' +
     'Press 4 for words of wisdom.',
 
   recordingDisclosure:
-    "This call may be recorded for Harold's archives.",
+    "Please note, Harold may record this call to listen to later, ideally from a sunbeam.",
 
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
