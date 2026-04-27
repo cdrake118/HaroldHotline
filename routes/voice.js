@@ -202,6 +202,7 @@ router.post('/wisdom', (req, res) => {
 
   const twiml = new twilio.twiml.VoiceResponse();
 
+  audioOrPause(twiml, config.audio.holdMusic, config.audio.holdMusicPauseSecs);
   audioOrPause(twiml, config.audio.haroldMeowingShort, config.audio.haroldMeowingShortPauseSecs);
 
   twiml.say({ voice: config.announcerVoice }, config.wisdom.intro);
