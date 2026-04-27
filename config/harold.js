@@ -33,15 +33,14 @@ const config = {
   greeting:
     "Hello caller, thank you for calling Harold's Hotline. " +
     'Press 1 to leave a confession for Harold. ' +
-    'Press 2 to speak to Harold directly.',
+    'Press 2 to speak to Harold directly. ' +
+    'Press 3 to ask Harold a question.',
 
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
 
   // Confession flow
   confession: {
-    holdMessage:
-      "Please hold for Harold to come to the phone. He's just finishing a nap.",
     recordingPrompt:
       'Please leave your confession for Harold. When you are finished, press 1.',
     thankYouMessage: (instagram) =>
@@ -74,6 +73,20 @@ const config = {
     ],
     thankYouMessage:
       "Thank you so much for calling Harold's Hotline. Have a wonderful day!",
+    messagePrompt:
+      "If you'd like to leave Harold a message for when he returns, press 1 now.",
+    messageRecordingPrompt:
+      "Please leave your message for Harold after the tone. When you are finished, press 1.",
+  },
+
+  // Ask-Harold-a-Question flow
+  question: {
+    recordingPrompt:
+      'Please leave your question for Harold after the tone. When you are finished, press 1.',
+    thankYouMessage: (instagram) =>
+      "Thank you for calling Harold's Hotline. Harold will consider your question." +
+      (instagram ? ` He may respond on his Instagram, ${instagram}.` : '') +
+      ' Goodbye!',
   },
 };
 
@@ -82,6 +95,6 @@ function pickRandom(arr) {
 }
 
 config.pickIntroExcuse = () => pickRandom(config.speak.introExcuses);
-config.pickExitExcuse = () => pickRandom(config.speak.exitExcuses);
+config.pickExitExcuse  = () => pickRandom(config.speak.exitExcuses);
 
 module.exports = config;

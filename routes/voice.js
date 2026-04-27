@@ -52,6 +52,11 @@ router.post('/menu', (req, res) => {
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/speak`);
     respond(twiml);
+  } else if (Digits === '3') {
+    db.upsertCall(CallSid, From, 'question');
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/question`);
+    respond(twiml);
   } else {
     const twiml = new twilio.twiml.VoiceResponse();
     const gather = twiml.gather({
@@ -78,7 +83,7 @@ router.post('/confession', (req, res) => {
 
   const twiml = new twilio.twiml.VoiceResponse();
 
-  twiml.say({ voice: config.announcerVoice }, config.confession.holdMessage);
+  twiml.say({ voice: config.announcerVoice }, config.pickIntroExcuse());
 
   audioOrPause(twiml, config.audio.holdMusic, config.audio.holdMusicPauseSecs);
   audioOrPause(twiml, config.audio.haroldMeowingShort, config.audio.haroldMeowingShortPauseSecs);
@@ -131,7 +136,99 @@ router.post('/speak', (req, res) => {
   audioOrPause(twiml, config.audio.haroldMeowingLong, config.audio.haroldMeowingLongPauseSecs);
 
   twiml.say({ voice: config.announcerVoice }, exitExcuse);
+
+  const gather = twiml.gather({
+    numDigits: '1',
+    action: `${config.baseUrl}/voice/speak/message-option`,
+    method: 'POST',
+    timeout: 8,
+  });
+  gather.say({ voice: config.announcerVoice }, config.speak.messagePrompt);
+
   twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+  twiml.hangup();
+
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+router.post('/speak/message-option', (req, res) => {
+  const { Digits } = req.body;
+  const twiml = new twilio.twiml.VoiceResponse();
+  if (Digits === '1') {
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/speak/message`);
+  } else {
+    twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+    twiml.hangup();
+  }
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+router.post('/speak/message', (req, res) => {
+  const twiml = new twilio.twiml.VoiceResponse();
+  twiml.say({ voice: config.announcerVoice }, config.speak.messageRecordingPrompt);
+  twiml.record({
+    maxLength: 180,
+    finishOnKey: '1',
+    action: `${config.baseUrl}/voice/speak/message/complete`,
+    recordingStatusCallback: `${config.baseUrl}/voice/recording-status`,
+    recordingStatusCallbackMethod: 'POST',
+  });
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+router.post('/speak/message/complete', (req, res) => {
+  const { CallSid, RecordingUrl, RecordingSid } = req.body;
+  if (RecordingUrl && RecordingSid) {
+    db.updateRecording(CallSid, RecordingUrl, RecordingSid);
+  }
+  const twiml = new twilio.twiml.VoiceResponse();
+  twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+  twiml.hangup();
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+// ── Ask-Harold-a-Question flow ────────────────────────────────────────────────
+router.post('/question', (req, res) => {
+  const { CallSid, From } = req.body;
+  db.upsertCall(CallSid, From, 'question');
+
+  const twiml = new twilio.twiml.VoiceResponse();
+
+  twiml.say({ voice: config.announcerVoice }, config.pickIntroExcuse());
+
+  audioOrPause(twiml, config.audio.holdMusic, config.audio.holdMusicPauseSecs);
+  audioOrPause(twiml, config.audio.haroldMeowingShort, config.audio.haroldMeowingShortPauseSecs);
+
+  twiml.say({ voice: config.announcerVoice }, config.question.recordingPrompt);
+
+  twiml.record({
+    maxLength: 180,
+    finishOnKey: '1',
+    action: `${config.baseUrl}/voice/question/complete`,
+    recordingStatusCallback: `${config.baseUrl}/voice/recording-status`,
+    recordingStatusCallbackMethod: 'POST',
+    transcribe: true,
+    transcribeCallback: `${config.baseUrl}/voice/transcription`,
+  });
+
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+router.post('/question/complete', (req, res) => {
+  const { CallSid, RecordingUrl, RecordingSid } = req.body;
+
+  if (RecordingUrl && RecordingSid) {
+    db.updateRecording(CallSid, RecordingUrl, RecordingSid);
+  }
+
+  const twiml = new twilio.twiml.VoiceResponse();
+  const instagram = config.haroldInstagram;
+  twiml.say({ voice: config.announcerVoice }, config.question.thankYouMessage(instagram));
   twiml.hangup();
 
   res.type('text/xml');

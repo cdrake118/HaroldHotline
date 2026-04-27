@@ -12,7 +12,7 @@ db.exec(`
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     call_sid          TEXT UNIQUE NOT NULL,
     caller_number     TEXT,
-    call_type         TEXT,        -- 'confession' or 'speak'
+    call_type         TEXT,        -- 'confession' | 'speak' | 'question'
     call_status       TEXT,
     duration          INTEGER,
     recording_url     TEXT,
@@ -76,7 +76,8 @@ const stmts = {
     SELECT
       COUNT(*) as total,
       SUM(CASE WHEN call_type = 'confession' THEN 1 ELSE 0 END) as confessions,
-      SUM(CASE WHEN call_type = 'speak' THEN 1 ELSE 0 END) as speak_calls,
+      SUM(CASE WHEN call_type = 'speak'      THEN 1 ELSE 0 END) as speak_calls,
+      SUM(CASE WHEN call_type = 'question'   THEN 1 ELSE 0 END) as questions,
       SUM(CASE WHEN recording_url IS NOT NULL THEN 1 ELSE 0 END) as recordings
     FROM calls
   `),
