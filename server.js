@@ -43,8 +43,8 @@ app.get('/', (req, res) => {
   const ttSlug = tt ? tt.replace(/\s+/g, '') : '';
   const socialsHtml = (ig || tt) ? `
     <div class="socials">
-      ${ig ? `<a class="social-btn" href="https://instagram.com/${igSlug}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
-      ${tt ? `<a class="social-btn" href="https://tiktok.com/@${ttSlug}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
+      ${ig ? `<a class="social-btn" href="https://www.instagram.com/${igSlug}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
+      ${tt ? `<a class="social-btn" href="https://www.tiktok.com/@${ttSlug}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
     </div>` : '';
 
   const html = template
