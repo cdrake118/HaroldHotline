@@ -16,6 +16,9 @@ app.use('/audio', express.static(audioDir));
 app.use('/voice', require('./routes/voice'));
 app.use('/dashboard', require('./routes/dashboard'));
 
+// Health check for Railway
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 // Root redirect → dashboard
 app.get('/', (req, res) => res.redirect('/dashboard'));
 
@@ -27,6 +30,9 @@ app.use((err, req, res, next) => {
   twiml.say('An internal error occurred. Please try again later.');
   res.status(500).type('text/xml').send(twiml.toString());
 });
+
+process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 
 app.listen(config.port, () => {
   console.log(`\nHarold's Hotline is running on port ${config.port}`);
