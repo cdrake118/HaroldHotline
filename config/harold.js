@@ -32,14 +32,14 @@ const config = {
   // ── Configurable messages ──────────────────────────────────────────────────
 
   greeting:
-    "Hello caller, thank you for calling Harold's Hotline. " +
-    'Press 1 to leave a confession for Harold. ' +
-    'Press 2 to speak to Harold directly. ' +
+    "Thank you for calling Harold's Hotline. " +
+    'Press 1 for confessions. ' +
+    'Press 2 to speak to Harold. ' +
     'Press 3 to ask Harold a question. ' +
-    'Press 4 for words of wisdom from Harold.',
+    'Press 4 for words of wisdom.',
 
   recordingDisclosure:
-    "Please note, this call may be recorded for Harold's personal archives. He's very thorough for a cat.",
+    "This call may be recorded for Harold's archives.",
 
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
