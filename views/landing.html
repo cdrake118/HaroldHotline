@@ -44,9 +44,11 @@
       font-size: clamp(9px, 1.8vw, 13px);
       letter-spacing: .45em;
       color: #ff3d8b;
-    }
-    @media (max-width: 440px) {
-      .eyebrow { letter-spacing: .18em; }
+      /* Break out of the max-width column so it always has full viewport width */
+      white-space: nowrap;
+      width: 100vw;
+      margin-left: calc(-50vw + 50%);
+      overflow: hidden;
     }
 
     /* ── Title ── */
