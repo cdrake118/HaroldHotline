@@ -13,49 +13,44 @@
     body {
       background: #1a1238;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    /* Scaler owns the visible footprint; poster is absolutely inside it */
-    .poster-scaler { position: relative; }
-
-    .poster {
-      width: 850px;
-      height: 1100px;
-      position: absolute;
-      top: 0;
-      left: 0;
-      background: #1a1238;
+      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
       color: #ffd84d;
-      overflow: hidden;
-      transform-origin: top left;
     }
 
-    /* ── Background SVG ── */
+    /* Fixed full-viewport background: radial glow + rays + stars */
     .poster-bg {
-      position: absolute;
+      position: fixed;
       inset: 0;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
       opacity: .9;
+      z-index: 0;
+    }
+
+    /* Centered content column */
+    .poster {
+      position: relative;
+      z-index: 1;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 0 24px 72px;
     }
 
     /* ── Eyebrow ── */
     .eyebrow {
-      position: relative;
       text-align: center;
-      padding: 32px 40px 0;
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 13px;
-      letter-spacing: .55em;
+      padding-top: 32px;
+      font-size: clamp(9px, 1.8vw, 13px);
+      letter-spacing: .45em;
       color: #ff3d8b;
+    }
+    @media (max-width: 440px) {
+      .eyebrow { letter-spacing: .18em; }
     }
 
     /* ── Title ── */
     .title-block {
-      position: relative;
       text-align: center;
       margin-top: 12px;
     }
@@ -63,23 +58,22 @@
       font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
       font-style: italic;
       font-weight: 500;
-      font-size: 44px;
+      font-size: clamp(24px, 5vw, 44px);
       color: #ffd84d;
       margin-bottom: -2px;
     }
     .title-main {
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 110px;
+      font-size: clamp(62px, 13vw, 110px);
       line-height: .9;
       letter-spacing: .02em;
       color: #ffd84d;
-      text-shadow: 4px 4px 0 #ff3d8b;
+      text-shadow: 3px 3px 0 #ff3d8b;
     }
     .title-hotline {
       font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
       font-style: italic;
       font-weight: 600;
-      font-size: 72px;
+      font-size: clamp(42px, 8.5vw, 72px);
       line-height: 1;
       color: #ff3d8b;
       margin-top: -4px;
@@ -87,19 +81,18 @@
 
     /* ── Portrait ── */
     .portrait-wrap {
-      position: relative;
       display: flex;
       justify-content: center;
-      margin-top: 12px;
+      margin-top: 16px;
     }
     .portrait-frame {
-      width: 360px;
-      height: 360px;
+      width: min(72vw, 360px);
+      height: min(72vw, 360px);
       border-radius: 50%;
       border: 3px solid #ffd84d;
       padding: 8px;
       background: #1a1238;
-      box-shadow: 0 0 0 8px #1a1238, 0 0 0 11px #ff3d8b, 0 0 80px rgba(255,61,139,.4);
+      box-shadow: 0 0 0 8px #1a1238, 0 0 0 11px #ff3d8b, 0 0 60px rgba(255,61,139,.4);
       flex-shrink: 0;
     }
     .portrait-inner {
@@ -112,7 +105,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 100px;
+      font-size: min(18vw, 90px);
     }
     .portrait-inner img {
       position: absolute;
@@ -134,21 +127,19 @@
 
     /* ── Phone number ── */
     .phone-block {
-      position: relative;
       text-align: center;
-      margin-top: 18px;
+      margin-top: 20px;
     }
     .phone-sub {
       font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
       font-style: italic;
-      font-size: 20px;
+      font-size: clamp(14px, 2.5vw, 20px);
       color: #b89dff;
       margin-bottom: 2px;
     }
     .phone-number {
       display: block;
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 88px;
+      font-size: clamp(44px, 10vw, 88px);
       line-height: 1;
       color: #ffd84d;
       text-shadow: 0 0 24px rgba(255,216,77,.53);
@@ -158,12 +149,11 @@
 
     /* ── Menu ── */
     .menu-block {
-      position: relative;
-      padding: 14px 70px 0;
+      margin-top: 20px;
+      padding: 0 clamp(0px, 4vw, 40px);
     }
     .menu-header {
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 13px;
+      font-size: clamp(10px, 1.8vw, 13px);
       letter-spacing: .45em;
       color: #ff3d8b;
       text-align: center;
@@ -173,47 +163,55 @@
     .menu-item {
       display: flex;
       align-items: baseline;
-      gap: 14px;
+      gap: 12px;
       border-bottom: 1px dotted rgba(184,157,255,.4);
-      padding-bottom: 4px;
+      padding-bottom: 5px;
     }
     .menu-num {
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 32px;
+      font-size: clamp(22px, 4.5vw, 32px);
       line-height: 1;
       color: #ff3d8b;
-      width: 32px;
+      width: clamp(22px, 4.5vw, 32px);
       flex-shrink: 0;
     }
     .menu-label {
       font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
       font-style: italic;
       font-weight: 600;
-      font-size: 22px;
-      line-height: 1.1;
+      font-size: clamp(17px, 3.2vw, 22px);
+      line-height: 1.15;
       color: #ffd84d;
       flex: 1;
     }
     .menu-hint {
       font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-      font-size: 12px;
+      font-size: clamp(10px, 1.6vw, 12px);
       color: #b89dff;
       opacity: .7;
+      white-space: nowrap;
+    }
+    @media (max-width: 400px) {
+      .menu-hint { display: none; }
+    }
+
+    /* ── Footer area (socials + website + disclaimer) ── */
+    .footer-area {
+      margin-top: 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
     }
 
     /* ── Socials bar ── */
     .socials-bar {
-      position: absolute;
-      bottom: 38px;
-      left: 0;
-      right: 0;
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 24px;
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 14px;
-      letter-spacing: .32em;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: clamp(11px, 2vw, 14px);
+      letter-spacing: .28em;
       color: #ffd84d;
     }
     .socials-bar a {
@@ -225,104 +223,112 @@
     }
     .socials-bar a:hover { color: #ff3d8b; }
     .social-star { color: #ff3d8b; }
+    @media (max-width: 420px) {
+      .social-star { display: none; }
+      .socials-bar { flex-direction: column; gap: 8px; }
+    }
 
-    /* ── Footer ── */
-    .footer-disclaimer {
-      position: absolute;
-      bottom: 18px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-family: 'Bebas Neue', Oswald, Impact, sans-serif;
-      font-size: 11px;
-      letter-spacing: .4em;
+    /* ── Website link ── */
+    .website-link {
+      font-size: clamp(10px, 1.8vw, 13px);
+      letter-spacing: .35em;
       color: #b89dff;
-      opacity: .8;
+      text-decoration: none;
+      opacity: .85;
+    }
+    .website-link:hover { color: #ffd84d; opacity: 1; }
+
+    /* ── Footer disclaimer ── */
+    .footer-disclaimer {
+      text-align: center;
+      font-size: clamp(8px, 1.4vw, 11px);
+      letter-spacing: .38em;
+      color: #b89dff;
+      opacity: .7;
     }
   </style>
 </head>
 <body>
 
-<div class="poster-scaler">
-  <div class="poster">
+<!-- Decorative background: radial gradient + starburst rays + star dots -->
+<svg class="poster-bg" viewBox="0 0 850 1100" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="psychicGlow" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#3a1f6b" stop-opacity="1" />
+      <stop offset="100%" stop-color="#1a1238" stop-opacity="1" />
+    </radialGradient>
+  </defs>
+  <rect width="850" height="1100" fill="url(#psychicGlow)" />
+  <g id="rays"></g>
+  <g id="stars"></g>
+</svg>
 
-    <!-- Decorative background: radial gradient + starburst rays + star dots -->
-    <svg class="poster-bg" width="850" height="1100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="psychicGlow" cx="50%" cy="42%" r="60%">
-          <stop offset="0%" stop-color="#3a1f6b" stop-opacity="1" />
-          <stop offset="100%" stop-color="#1a1238" stop-opacity="1" />
-        </radialGradient>
-      </defs>
-      <rect width="850" height="1100" fill="url(#psychicGlow)" />
-      <g id="rays"></g>
-      <g id="stars"></g>
-    </svg>
+<div class="poster">
 
-    <!-- Eyebrow -->
-    <div class="eyebrow">★ ★ ★ &nbsp; LIVE · SOMETIMES CONFIDENTIAL · FELINE &nbsp; ★ ★ ★</div>
+  <!-- Eyebrow -->
+  <div class="eyebrow">★ ★ ★ &nbsp; LIVE · SOMETIMES CONFIDENTIAL · FELINE &nbsp; ★ ★ ★</div>
 
-    <!-- Title -->
-    <div class="title-block">
-      <div class="title-sub">the one and only</div>
-      <div class="title-main">HAROLD'S</div>
-      <div class="title-hotline">Hotline</div>
-    </div>
-
-    <!-- Harold portrait -->
-    <div class="portrait-wrap">
-      <div class="portrait-frame">
-        <div class="portrait-inner">
-          {{HAROLD_PHOTO}}
-          <div class="portrait-overlay"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Phone number (clickable tel: link) -->
-    <div class="phone-block">
-      <div class="phone-sub">call now — operators (one cat) standing by</div>
-      <a class="phone-number" href="tel:{{PHONE_RAW}}">{{PHONE_DISPLAY}}</a>
-    </div>
-
-    <!-- Menu options -->
-    <div class="menu-block">
-      <div class="menu-header">· · ·  CHOOSE YOUR FATE  · · ·</div>
-      <div class="menu-list">
-        <div class="menu-item">
-          <span class="menu-num">1</span>
-          <span class="menu-label">Leave Harold a confession</span>
-          <span class="menu-hint">press 1</span>
-        </div>
-        <div class="menu-item">
-          <span class="menu-num">2</span>
-          <span class="menu-label">Speak to Harold directly</span>
-          <span class="menu-hint">press 2</span>
-        </div>
-        <div class="menu-item">
-          <span class="menu-num">3</span>
-          <span class="menu-label">Ask Harold a question</span>
-          <span class="menu-hint">press 3</span>
-        </div>
-        <div class="menu-item">
-          <span class="menu-num">4</span>
-          <span class="menu-label">Receive words of wisdom from Harold</span>
-          <span class="menu-hint">press 4</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Social links (generated by server) -->
-    {{SOCIALS}}
-
-    <!-- Footer -->
-    <div class="footer-disclaimer">FOR ENTERTAINMENT &amp; ENLIGHTENMENT · MAY NOT ANSWER DURING NAPTIME</div>
-
+  <!-- Title -->
+  <div class="title-block">
+    <div class="title-sub">the one and only</div>
+    <div class="title-main">HAROLD'S</div>
+    <div class="title-hotline">Hotline</div>
   </div>
+
+  <!-- Harold portrait -->
+  <div class="portrait-wrap">
+    <div class="portrait-frame">
+      <div class="portrait-inner">
+        {{HAROLD_PHOTO}}
+        <div class="portrait-overlay"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phone number (tap-to-call) -->
+  <div class="phone-block">
+    <div class="phone-sub">call now — operators (one cat) standing by</div>
+    <a class="phone-number" href="tel:{{PHONE_RAW}}">{{PHONE_DISPLAY}}</a>
+  </div>
+
+  <!-- Menu options -->
+  <div class="menu-block">
+    <div class="menu-header">· · ·  CHOOSE YOUR FATE  · · ·</div>
+    <div class="menu-list">
+      <div class="menu-item">
+        <span class="menu-num">1</span>
+        <span class="menu-label">Leave Harold a confession</span>
+        <span class="menu-hint">press 1</span>
+      </div>
+      <div class="menu-item">
+        <span class="menu-num">2</span>
+        <span class="menu-label">Speak to Harold directly</span>
+        <span class="menu-hint">press 2</span>
+      </div>
+      <div class="menu-item">
+        <span class="menu-num">3</span>
+        <span class="menu-label">Ask Harold a question</span>
+        <span class="menu-hint">press 3</span>
+      </div>
+      <div class="menu-item">
+        <span class="menu-num">4</span>
+        <span class="menu-label">Receive words of wisdom from Harold</span>
+        <span class="menu-hint">press 4</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer: socials + website + disclaimer -->
+  <div class="footer-area">
+    {{SOCIALS}}
+    <a class="website-link" href="https://www.haroldshotline.com" target="_blank" rel="noopener">HAROLDSHOTLINE.COM</a>
+    <div class="footer-disclaimer">FOR ENTERTAINMENT &amp; ENLIGHTENMENT · MAY NOT ANSWER DURING NAPTIME</div>
+  </div>
+
 </div>
 
 <script>
-  // Populate SVG: 36 starburst rays from (425, 480)
+  // Populate SVG background: 36 starburst rays from (425, 480)
   const NS = 'http://www.w3.org/2000/svg';
   const raysEl = document.getElementById('rays');
   for (let i = 0; i < 36; i++) {
@@ -338,7 +344,7 @@
     raysEl.appendChild(line);
   }
 
-  // Populate SVG: 40 scattered star dots
+  // Populate SVG background: 40 scattered star dots
   const starsEl = document.getElementById('stars');
   for (let i = 0; i < 40; i++) {
     const circle = document.createElementNS(NS, 'circle');
@@ -349,23 +355,6 @@
     circle.setAttribute('opacity', String(0.5 + (i % 5) * 0.1));
     starsEl.appendChild(circle);
   }
-
-  // Scale the fixed 850×1100 poster to fit the viewport, maintaining aspect ratio
-  function scalePoster() {
-    const pad = 48;
-    const s = Math.min(
-      (window.innerWidth  - pad) / 850,
-      (window.innerHeight - pad) / 1100,
-      1
-    );
-    const scaler = document.querySelector('.poster-scaler');
-    const poster  = document.querySelector('.poster');
-    scaler.style.width  = (850  * s) + 'px';
-    scaler.style.height = (1100 * s) + 'px';
-    poster.style.transform = 'scale(' + s + ')';
-  }
-  scalePoster();
-  window.addEventListener('resize', scalePoster);
 </script>
 
 </body>
