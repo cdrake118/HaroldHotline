@@ -55,7 +55,7 @@ const config = {
     // Shown before hold music + Harold audio
     introExcuses: [
       "Please hold while Harold comes to the phone. He's currently waking up from a nap.",
-      "Please hold while Harold comes to the phone. He's chasing a chipmunk and will be right with you.",
+      "Please hold while Harold comes to the phone. He's watching a chipmunk and will be right with you.",
       "Please hold while Harold comes to the phone. He's currently sitting in a paper bag.",
       "Please hold while Harold comes to the phone. He's staring intensely at the wall and needs a moment.",
       "Please hold while Harold comes to the phone. He's knocking items off the counter and will be right there.",
