@@ -127,7 +127,7 @@ router.post('/api/voiceover', adminAuth, async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error('Voiceover error:', err);
-    res.status(500).json({ error: 'Failed to generate voiceover' });
+    res.status(500).json({ error: err.message || 'Failed to generate voiceover' });
   }
 });
 
