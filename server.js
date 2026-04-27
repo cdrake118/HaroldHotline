@@ -13,6 +13,9 @@ app.use(express.json());
 const audioDir = process.env.AUDIO_DIR || path.join(__dirname, 'public', 'audio');
 app.use('/audio', express.static(audioDir));
 
+// Serve other static assets (images, etc.)
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Routes
 app.use('/voice', require('./routes/voice'));
 app.use('/dashboard', require('./routes/dashboard'));
