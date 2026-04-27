@@ -36,10 +36,12 @@ app.get('/', (req, res) => {
 
   const ig = config.haroldInstagram;
   const tt = config.haroldTikTok;
+  const igSlug = ig ? ig.replace(/\s+/g, '') : '';
+  const ttSlug = tt ? tt.replace(/\s+/g, '') : '';
   const socialsHtml = (ig || tt) ? `
     <div class="socials">
-      ${ig ? `<a class="social-btn" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
-      ${tt ? `<a class="social-btn" href="https://tiktok.com/@${tt}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
+      ${ig ? `<a class="social-btn" href="https://instagram.com/${igSlug}" target="_blank" rel="noopener">📸 Instagram</a>` : ''}
+      ${tt ? `<a class="social-btn" href="https://tiktok.com/@${ttSlug}" target="_blank" rel="noopener">🎵 TikTok</a>` : ''}
     </div>` : '';
 
   const html = template
