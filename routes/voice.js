@@ -57,6 +57,11 @@ router.post('/menu', (req, res) => {
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/question`);
     respond(twiml);
+  } else if (Digits === '4') {
+    db.upsertCall(CallSid, From, 'wisdom');
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/wisdom`);
+    respond(twiml);
   } else {
     const twiml = new twilio.twiml.VoiceResponse();
     const gather = twiml.gather({
@@ -112,8 +117,7 @@ router.post('/confession/complete', (req, res) => {
   }
 
   const twiml = new twilio.twiml.VoiceResponse();
-  const instagram = config.haroldInstagram;
-  twiml.say({ voice: config.announcerVoice }, config.confession.thankYouMessage(instagram));
+  twiml.say({ voice: config.announcerVoice }, config.confession.thankYouMessage());
   twiml.hangup();
 
   res.type('text/xml');
@@ -145,7 +149,7 @@ router.post('/speak', (req, res) => {
   });
   gather.say({ voice: config.announcerVoice }, config.speak.messagePrompt);
 
-  twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+  twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage());
   twiml.hangup();
 
   res.type('text/xml');
@@ -158,7 +162,7 @@ router.post('/speak/message-option', (req, res) => {
   if (Digits === '1') {
     twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/speak/message`);
   } else {
-    twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+    twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage());
     twiml.hangup();
   }
   res.type('text/xml');
@@ -185,8 +189,26 @@ router.post('/speak/message/complete', (req, res) => {
     db.updateRecording(CallSid, RecordingUrl, RecordingSid);
   }
   const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say({ voice: config.announcerVoice }, config.speak.thankYouMessage);
+  twiml.say({ voice: config.announcerVoice }, config.speak.messageThankYouMessage());
   twiml.hangup();
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+// ── Words of Wisdom flow ──────────────────────────────────────────────────────
+router.post('/wisdom', (req, res) => {
+  const { CallSid, From } = req.body;
+  db.upsertCall(CallSid, From, 'wisdom');
+
+  const twiml = new twilio.twiml.VoiceResponse();
+
+  audioOrPause(twiml, config.audio.haroldMeowingShort, config.audio.haroldMeowingShortPauseSecs);
+
+  twiml.say({ voice: config.announcerVoice }, config.wisdom.intro);
+  twiml.say({ voice: config.announcerVoice }, config.pickWisdom());
+  twiml.say({ voice: config.announcerVoice }, config.wisdom.thankYouMessage());
+  twiml.hangup();
+
   res.type('text/xml');
   res.send(twiml.toString());
 });
@@ -227,8 +249,7 @@ router.post('/question/complete', (req, res) => {
   }
 
   const twiml = new twilio.twiml.VoiceResponse();
-  const instagram = config.haroldInstagram;
-  twiml.say({ voice: config.announcerVoice }, config.question.thankYouMessage(instagram));
+  twiml.say({ voice: config.announcerVoice }, config.question.thankYouMessage());
   twiml.hangup();
 
   res.type('text/xml');

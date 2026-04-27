@@ -19,6 +19,7 @@
       --confession: #7c3aed;
       --speak:   #0369a1;
       --question: #b45309;
+      --wisdom:   #166534;
       --green:   #16a34a;
       --red:     #dc2626;
     }
@@ -126,6 +127,7 @@
     .badge-confession { background: #ede9fe; color: var(--confession); }
     .badge-speak      { background: #e0f2fe; color: var(--speak); }
     .badge-question   { background: #fef3c7; color: var(--question); }
+    .badge-wisdom     { background: #dcfce7; color: var(--wisdom); }
     .badge-unknown    { background: #f3f4f6; color: var(--muted); }
 
     .ts-status {
@@ -366,6 +368,7 @@
     if (type === 'confession') return '<span class="badge badge-confession">🗣 Confession</span>';
     if (type === 'speak')      return '<span class="badge badge-speak">😺 Spoke to Harold</span>';
     if (type === 'question')   return '<span class="badge badge-question">❓ Question</span>';
+    if (type === 'wisdom')     return '<span class="badge badge-wisdom">🐾 Wisdom</span>';
     return '<span class="badge badge-unknown">?</span>';
   }
 
