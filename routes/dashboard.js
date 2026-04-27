@@ -39,6 +39,22 @@ router.get('/api/debug', (req, res) => {
   });
 });
 
+// ── Admin auth ────────────────────────────────────────────────────────────────
+function adminAuth(req, res, next) {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) return next();
+
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Basic ')) {
+    const decoded = Buffer.from(auth.slice(6), 'base64').toString();
+    const pass = decoded.slice(decoded.indexOf(':') + 1);
+    if (pass === password) return next();
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="Harold Admin"');
+  res.status(401).json({ error: 'Authentication required' });
+}
+
 // ── REST API ──────────────────────────────────────────────────────────────────
 
 router.get('/api/stats', (req, res) => {
@@ -86,6 +102,43 @@ router.get('/api/calls/:id/recording', async (req, res) => {
     console.error('Recording proxy error:', err);
     res.status(500).json({ error: 'Internal error fetching recording' });
   }
+});
+
+// ── Admin actions ─────────────────────────────────────────────────────────────
+
+router.patch('/api/calls/:id/flag', adminAuth, (req, res) => {
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+  const newFlagged = call.flagged ? 0 : 1;
+  db.flagCall(call.id, newFlagged);
+  res.json({ flagged: newFlagged });
+});
+
+router.delete('/api/calls/:id/recording', adminAuth, async (req, res) => {
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+  if (!call.recording_sid) return res.status(404).json({ error: 'No recording for this call' });
+
+  const url =
+    `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}` +
+    `/Recordings/${call.recording_sid}`;
+  const credentials = Buffer.from(`${config.accountSid}:${config.authToken}`).toString('base64');
+
+  try {
+    const upstream = await fetch(url, {
+      method: 'DELETE',
+      headers: { Authorization: `Basic ${credentials}` },
+    });
+    if (!upstream.ok && upstream.status !== 404) {
+      return res.status(502).json({ error: 'Failed to delete recording from Twilio' });
+    }
+  } catch (err) {
+    console.error('Twilio recording delete error:', err);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+
+  db.clearRecording(call.id);
+  res.json({ success: true });
 });
 
 module.exports = router;

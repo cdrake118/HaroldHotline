@@ -30,6 +30,13 @@ db.exec(`
   END;
 `);
 
+// Migration: add flagged column for existing databases
+try {
+  db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`);
+} catch (_) {
+  // column already exists
+}
+
 const stmts = {
   upsertCall: db.prepare(`
     INSERT INTO calls (call_sid, caller_number, call_type)
@@ -63,6 +70,14 @@ const stmts = {
   getCall: db.prepare(`SELECT * FROM calls WHERE call_sid = ?`),
 
   getCallById: db.prepare(`SELECT * FROM calls WHERE id = ?`),
+
+  flagCall: db.prepare(`UPDATE calls SET flagged = @flagged WHERE id = @id`),
+
+  clearRecording: db.prepare(`
+    UPDATE calls SET recording_url = NULL, recording_sid = NULL,
+      transcript = NULL, transcript_status = 'none'
+    WHERE id = @id
+  `),
 
   getCallByRecordingSid: db.prepare(`SELECT * FROM calls WHERE recording_sid = ?`),
 
@@ -98,6 +113,10 @@ module.exports = {
 
   updateTranscriptByRecordingSid: (recordingSid, transcript, transcriptStatus) =>
     stmts.updateTranscriptByRecordingSid.run({ recordingSid, transcript, transcriptStatus }),
+
+  flagCall: (id, flagged) => stmts.flagCall.run({ id, flagged }),
+
+  clearRecording: (id) => stmts.clearRecording.run({ id }),
 
   getCall: (callSid) => stmts.getCall.get(callSid),
 

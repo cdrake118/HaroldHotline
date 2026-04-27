@@ -182,6 +182,32 @@
       font-style: italic;
     }
 
+    /* ── Flagged rows ────────────────────────────────────────────────────── */
+    tr.flagged-row td { background: #fff1f2; }
+    tr.flagged-row:hover td { background: #ffe4e6; }
+
+    /* ── Admin buttons ───────────────────────────────────────────────────── */
+    .admin-actions {
+      display: flex;
+      gap: .5rem;
+      margin-top: 1rem;
+      padding-top: .75rem;
+      border-top: 1px solid var(--border);
+    }
+    .admin-btn {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: .35rem .8rem;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .admin-btn:hover { background: #f3f4f6; }
+    .admin-btn.danger { border-color: #fca5a5; color: var(--red); }
+    .admin-btn.danger:hover { background: #fff1f2; }
+    .admin-btn.flagged { border-color: #fca5a5; background: #fff1f2; color: var(--red); }
+
     /* ── Pagination ──────────────────────────────────────────────────────── */
     .pagination {
       display: flex;
@@ -386,8 +412,8 @@
     }
 
     tbody.innerHTML = calls.map((call, i) => `
-      <tr onclick="toggleDetail(${call.id})" id="row-${call.id}">
-        <td>${offset + i + 1}</td>
+      <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
+        <td>${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
         <td>${formatDate(call.created_at)}</td>
         <td style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
         <td>${typeBadge(call.call_type)}</td>
@@ -416,6 +442,12 @@
               </div>
             </div>
           </div>
+          <div class="admin-actions">
+            <button class="admin-btn ${call.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();adminFlagCall(${call.id})">
+              🚩 ${call.flagged ? 'Unflag' : 'Flag'} call
+            </button>
+            ${call.recording_sid ? `<button class="admin-btn danger" onclick="event.stopPropagation();adminDeleteRecording(${call.id})">🗑 Delete recording</button>` : ''}
+          </div>
         </td>
       </tr>
     `).join('');
@@ -442,6 +474,41 @@
 
   function prevPage() { if (currentOffset >= PAGE_SIZE) loadCalls(currentOffset - PAGE_SIZE); }
   function nextPage() { if (currentOffset + PAGE_SIZE < totalCalls) loadCalls(currentOffset + PAGE_SIZE); }
+
+  // ── Admin ─────────────────────────────────────────────────────────────────
+  function adminHeaders() {
+    const pass = sessionStorage.getItem('adminPass');
+    return pass ? { Authorization: 'Basic ' + btoa('admin:' + pass) } : {};
+  }
+
+  async function adminFetch(url, options = {}) {
+    options.headers = { ...options.headers, ...adminHeaders() };
+    let res = await fetch(url, options);
+    if (res.status === 401) {
+      const pass = prompt('Admin password:');
+      if (pass === null) return null;
+      sessionStorage.setItem('adminPass', pass);
+      options.headers = { ...options.headers, Authorization: 'Basic ' + btoa('admin:' + pass) };
+      res = await fetch(url, options);
+    }
+    return res;
+  }
+
+  async function adminFlagCall(id) {
+    const res = await adminFetch(`/dashboard/api/calls/${id}/flag`, { method: 'PATCH' });
+    if (res && res.ok) loadCalls(currentOffset);
+  }
+
+  async function adminDeleteRecording(id) {
+    if (!confirm('Permanently delete this recording from Twilio? This cannot be undone.')) return;
+    const res = await adminFetch(`/dashboard/api/calls/${id}/recording`, { method: 'DELETE' });
+    if (res && res.ok) {
+      loadCalls(currentOffset);
+      loadStats();
+    } else if (res) {
+      alert('Failed to delete recording.');
+    }
+  }
 
   // Auto-refresh every 30s
   loadStats();
