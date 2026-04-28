@@ -17,10 +17,36 @@ function audioOrPause(node, url, pauseSecs) {
 }
 
 // ── Incoming call ─────────────────────────────────────────────────────────────
-// Twilio calls this webhook when someone dials the Harold Hotline number.
-// Set this as the "A call comes in" webhook in your Twilio phone number config.
 router.post('/incoming', (req, res) => {
   const { CallSid, From } = req.body;
+
+  // Harold unavailable mode
+  if (db.getSetting('unavailable') === 'true') {
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.say({ voice: config.announcerVoice }, config.unavailableMessage);
+    twiml.hangup();
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Blocklist check
+  if (From && db.isBlocked(From)) {
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.hangup();
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Rate limit check
+  const rateLimit = parseInt(db.getSetting('rate_limit') || '20', 10);
+  if (From && db.countCallsByNumberInLastHour(From) >= rateLimit) {
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.say({ voice: config.announcerVoice }, config.rateLimitMessage);
+    twiml.hangup();
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Returning caller detection (check before upserting so count excludes current call)
+  const isReturning = From && db.countCallsByNumber(From) > 0;
+
   db.upsertCall(CallSid, From, null);
 
   const twiml = new twilio.twiml.VoiceResponse();
@@ -32,7 +58,10 @@ router.post('/incoming', (req, res) => {
     timeout: 10,
   });
   gather.say({ voice: config.announcerVoice }, config.recordingDisclosure);
-  gather.say({ voice: config.announcerVoice }, config.greeting);
+  gather.say(
+    { voice: config.announcerVoice },
+    isReturning ? config.pickReturningGreeting() : config.pickGreeting()
+  );
 
   // Fallback if caller doesn't press anything
   twiml.say({ voice: config.announcerVoice }, config.noInputMessage);
@@ -67,6 +96,11 @@ router.post('/menu', (req, res) => {
     db.upsertCall(CallSid, From, 'wisdom');
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/wisdom`);
+    respond(twiml);
+  } else if (Digits === '9') {
+    // Repeat menu
+    const twiml = new twilio.twiml.VoiceResponse();
+    twiml.redirect({ method: 'POST' }, `${config.baseUrl}/voice/incoming`);
     respond(twiml);
   } else {
     const twiml = new twilio.twiml.VoiceResponse();
@@ -286,7 +320,6 @@ async function transcribeWithWhisper(callSid, recordingSid) {
   }
 }
 
-// Fires when recording status changes (completed, failed)
 router.post('/recording-status', (req, res) => {
   const { CallSid, RecordingSid, RecordingUrl, RecordingStatus } = req.body;
   if (RecordingStatus === 'completed' && CallSid && RecordingSid) {
@@ -296,7 +329,6 @@ router.post('/recording-status', (req, res) => {
   res.sendStatus(204);
 });
 
-// Fires when Twilio finishes transcribing a recording
 router.post('/transcription', (req, res) => {
   const { CallSid, RecordingSid, TranscriptionText, TranscriptionStatus } = req.body;
   if (CallSid) {
@@ -307,7 +339,6 @@ router.post('/transcription', (req, res) => {
   res.sendStatus(204);
 });
 
-// Fires on call status changes — used to capture duration
 router.post('/status', (req, res) => {
   const { CallSid, CallStatus, CallDuration } = req.body;
   if (CallSid) {

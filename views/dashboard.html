@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Harold's Free Hotline — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -273,6 +274,161 @@
     .page-btn:hover:not(:disabled) { background: var(--amber-lt); border-color: var(--amber); }
     .page-btn:disabled { opacity: .4; cursor: default; }
 
+    /* ── Chart section ───────────────────────────────────────────────────── */
+    .chart-section { padding: 0 2rem 1.5rem; }
+    .chart-body {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-top: .75rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .chart-body canvas { max-height: 220px; }
+
+    /* ── Admin controls section ──────────────────────────────────────────── */
+    .admin-section { padding: 0 2rem 1.5rem; }
+    .admin-body {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-top: .75rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .admin-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 720px) { .admin-grid { grid-template-columns: 1fr; } }
+
+    .admin-card { padding: .9rem 1rem; border: 1px solid var(--border); border-radius: 10px; background: #fffbeb; }
+    .admin-card h3 { font-size: .9rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+    .admin-card p.help { font-size: .78rem; color: var(--muted); margin-bottom: .65rem; }
+
+    .switch { display: inline-flex; align-items: center; gap: .55rem; cursor: pointer; user-select: none; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch .track {
+      width: 38px; height: 22px; border-radius: 999px; background: #d1d5db;
+      position: relative; transition: background .15s;
+    }
+    .switch .track::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; transition: left .15s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .switch input:checked + .track { background: var(--red); }
+    .switch input:checked + .track::after { left: 18px; }
+    .switch .label { font-weight: 600; font-size: .9rem; }
+
+    .rate-input {
+      width: 80px;
+      padding: .35rem .6rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .9rem;
+      font-family: inherit;
+    }
+    .rate-input:focus { outline: none; border-color: var(--amber); }
+
+    .blocklist-list { list-style: none; max-height: 160px; overflow-y: auto; }
+    .blocklist-list li {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .35rem .5rem; border-radius: 6px; font-size: .85rem;
+      font-family: monospace;
+    }
+    .blocklist-list li:hover { background: #fef3c7; }
+    .blocklist-empty { color: var(--muted); font-size: .8rem; font-style: italic; padding: .35rem .5rem; }
+
+    .blocklist-form, .rate-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .5rem; }
+    .blocklist-form input {
+      flex: 1; min-width: 140px;
+      padding: .35rem .6rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .85rem;
+      font-family: inherit;
+    }
+    .blocklist-form input:focus, .rate-input:focus { outline: none; border-color: var(--amber); }
+    .save-btn, .add-btn {
+      background: var(--amber); border: none; border-radius: 8px;
+      padding: .4rem .9rem; font-size: .85rem; font-weight: 600;
+      color: #fff; cursor: pointer; transition: background .15s;
+    }
+    .save-btn:hover, .add-btn:hover { background: var(--amber-dk); }
+    .remove-btn {
+      background: transparent; border: none; color: var(--red);
+      cursor: pointer; font-size: .9rem; padding: .15rem .4rem;
+    }
+    .remove-btn:hover { background: #fee2e2; border-radius: 4px; }
+
+    .rate-limited-list { list-style: none; max-height: 100px; overflow-y: auto; margin-top: .4rem; }
+    .rate-limited-list li {
+      padding: .25rem .4rem; font-family: monospace; font-size: .82rem;
+      display: flex; justify-content: space-between;
+    }
+    .rate-limited-empty { color: var(--muted); font-size: .8rem; font-style: italic; }
+
+    /* ── Filter bar ──────────────────────────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding: .75rem 1rem;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+    }
+    .filter-bar input[type="text"],
+    .filter-bar input[type="date"],
+    .filter-bar select {
+      padding: .35rem .65rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .85rem;
+      font-family: inherit;
+      background: #fff;
+    }
+    .filter-bar input[type="text"] { flex: 1; min-width: 180px; }
+    .filter-bar input[type="text"]:focus,
+    .filter-bar input[type="date"]:focus,
+    .filter-bar select:focus { outline: none; border-color: var(--amber); }
+    .filter-bar label { font-size: .75rem; color: var(--muted); font-weight: 600; }
+    .filter-clear {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 8px; padding: .35rem .8rem; font-size: .8rem;
+      cursor: pointer;
+    }
+    .filter-clear:hover { background: var(--amber-lt); border-color: var(--amber); }
+
+    /* ── Returning caller badge ──────────────────────────────────────────── */
+    .returning-badge {
+      display: inline-block;
+      background: #e0f2fe;
+      color: var(--speak);
+      font-size: .65rem;
+      font-weight: 700;
+      padding: .1rem .45rem;
+      border-radius: 999px;
+      margin-left: .35rem;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+
+    /* ── Status banner (unavailable mode) ────────────────────────────────── */
+    .status-banner {
+      background: var(--red);
+      color: #fff;
+      padding: .55rem 2rem;
+      font-size: .85rem;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: .3px;
+    }
+
     /* ── Mobile responsive ───────────────────────────────────────────────── */
     @media (max-width: 640px) {
       header { padding: 1rem; }
@@ -337,6 +493,12 @@
       .voiceover-section { padding: 0 .75rem; }
       .vo-row { flex-direction: column; align-items: stretch; }
       .vo-row select, .vo-generate { width: 100%; }
+
+      .chart-section, .admin-section { padding: 0 .75rem 1rem; }
+      .filter-bar { padding: .55rem .65rem; gap: .35rem; }
+      .filter-bar input[type="text"] { min-width: 100%; }
+      .filter-bar input[type="date"], .filter-bar select { flex: 1; min-width: 110px; }
+      .status-banner { padding: .5rem .75rem; font-size: .8rem; }
     }
   </style>
 </head>
@@ -350,6 +512,10 @@
   </div>
 </header>
 
+<div id="unavailable-banner" class="status-banner" style="display:none">
+  ⚠ Harold's Hotline is currently set to UNAVAILABLE. Incoming calls hear an away message.
+</div>
+
 <section class="stats" id="stats">
   <div class="stat-card"><div class="value" id="stat-total">—</div><div class="label">Total Calls</div></div>
   <div class="stat-card"><div class="value" id="stat-confessions">—</div><div class="label">Confessions</div></div>
@@ -357,6 +523,16 @@
   <div class="stat-card"><div class="value" id="stat-questions">—</div><div class="label">Advice Sought</div></div>
   <div class="stat-card"><div class="value" id="stat-wisdom">—</div><div class="label">Wisdom Seekers</div></div>
   <div class="stat-card"><div class="value" id="stat-recordings">—</div><div class="label">Recordings</div></div>
+</section>
+
+<section class="chart-section">
+  <div class="section-header">
+    <h2>Call Volume (Last 30 Days)</h2>
+    <button class="refresh-btn" onclick="toggleChart()">↕ Show / Hide</button>
+  </div>
+  <div class="chart-body" id="chart-panel">
+    <canvas id="volume-chart"></canvas>
+  </div>
 </section>
 
 <section class="voiceover-section">
@@ -388,6 +564,50 @@
   </div>
 </section>
 
+<section class="admin-section">
+  <div class="section-header">
+    <h2>Admin Controls</h2>
+    <button class="refresh-btn" onclick="toggleAdminPanel()">↕ Show / Hide</button>
+  </div>
+  <div class="admin-body" id="admin-panel" style="display:none">
+    <div class="admin-grid">
+      <div class="admin-card">
+        <h3>Harold Unavailable Mode</h3>
+        <p class="help">When enabled, callers hear an away message and the hotline hangs up.</p>
+        <label class="switch">
+          <input type="checkbox" id="toggle-unavailable" onchange="saveUnavailable()" />
+          <span class="track"></span>
+          <span class="label" id="unavailable-label">Available</span>
+        </label>
+      </div>
+
+      <div class="admin-card">
+        <h3>Rate Limit (calls per number per hour)</h3>
+        <p class="help">Callers exceeding this limit are politely turned away.</p>
+        <div class="rate-row">
+          <input type="number" min="1" max="500" class="rate-input" id="rate-limit-input" value="20" />
+          <button class="save-btn" onclick="saveRateLimit()">Save</button>
+        </div>
+        <div style="margin-top:.6rem">
+          <strong style="font-size:.75rem;color:var(--muted)">Currently rate-limited:</strong>
+          <ul class="rate-limited-list" id="rate-limited-list"></ul>
+        </div>
+      </div>
+
+      <div class="admin-card" style="grid-column: 1 / -1">
+        <h3>Caller Blocklist</h3>
+        <p class="help">Blocked numbers reach a silent hangup. Use full E.164 format (e.g. +14155551212).</p>
+        <ul class="blocklist-list" id="blocklist-list"></ul>
+        <div class="blocklist-form">
+          <input type="text" id="block-number" placeholder="+14155551212" />
+          <input type="text" id="block-reason" placeholder="Reason (optional)" />
+          <button class="add-btn" onclick="addBlocklist()">+ Block</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="calls-section">
   <div class="section-header">
     <h2>Recent Calls</h2>
@@ -395,6 +615,22 @@
       <button class="refresh-btn" id="btn-filter-recording" onclick="toggleRecordingFilter()" title="Show only calls with a recording">🎙 Has Recording</button>
       <button class="refresh-btn" onclick="loadCalls(0)">↻ Refresh</button>
     </div>
+  </div>
+
+  <div class="filter-bar">
+    <input type="text" id="search-input" placeholder="🔍 Search transcripts, numbers, types…" oninput="onSearchInput()" />
+    <label>From</label>
+    <input type="date" id="filter-from" onchange="onFilterChange()" />
+    <label>To</label>
+    <input type="date" id="filter-to" onchange="onFilterChange()" />
+    <select id="filter-type" onchange="onFilterChange()">
+      <option value="">All types</option>
+      <option value="confession">Confession</option>
+      <option value="speak">Spoke to Harold</option>
+      <option value="question">Advice</option>
+      <option value="wisdom">Wisdom</option>
+    </select>
+    <button class="filter-clear" onclick="clearFilters()">Clear</button>
   </div>
 
   <div class="calls-table">
@@ -426,10 +662,33 @@
   let currentOffset = 0;
   let totalCalls = 0;
   let filterRecording = false;
+  let searchQuery = '';
+  let searchDebounce = null;
 
   function toggleRecordingFilter() {
     filterRecording = !filterRecording;
     document.getElementById('btn-filter-recording').classList.toggle('active', filterRecording);
+    loadCalls(0);
+  }
+
+  function onFilterChange() { loadCalls(0); }
+
+  function onSearchInput() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      searchQuery = document.getElementById('search-input').value.trim();
+      loadCalls(0);
+    }, 300);
+  }
+
+  function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    document.getElementById('filter-type').value = '';
+    searchQuery = '';
+    filterRecording = false;
+    document.getElementById('btn-filter-recording').classList.remove('active');
     loadCalls(0);
   }
 
@@ -551,7 +810,24 @@
     const tbody = document.getElementById('calls-body');
     tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading…</td></tr>';
 
-    const res = await fetch(`/dashboard/api/calls?limit=${PAGE_SIZE}&offset=${offset}${filterRecording ? '&hasRecording=1' : ''}`);
+    const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
+    if (filterRecording) params.set('hasRecording', '1');
+
+    let url;
+    if (searchQuery) {
+      params.set('q', searchQuery);
+      url = `/dashboard/api/calls/search?${params.toString()}`;
+    } else {
+      const type = document.getElementById('filter-type')?.value;
+      const from = document.getElementById('filter-from')?.value;
+      const to   = document.getElementById('filter-to')?.value;
+      if (type) params.set('type', type);
+      if (from) params.set('from', from);
+      if (to)   params.set('to', to);
+      url = `/dashboard/api/calls?${params.toString()}`;
+    }
+
+    const res = await fetch(url);
     if (!res.ok) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty"><span class="cat">😿</span>Failed to load calls.</td></tr>';
       return;
@@ -571,7 +847,7 @@
       <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
         <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
         <td data-label="Date">${formatDate(call.created_at)}</td>
-        <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
+        <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${call.caller_call_count > 1 ? '<span class="returning-badge">↻ Returning</span>' : ''}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
         <td data-label="Type">${typeBadge(call.call_type)}</td>
         <td data-label="Duration">${formatDuration(call.duration)}</td>
         <td data-label="Transcript">${transcriptBadge(call.transcript_status)}</td>
@@ -730,10 +1006,190 @@
     }
   }
 
+  // ── Call volume chart ─────────────────────────────────────────────────────
+  let volumeChart = null;
+  function toggleChart() {
+    const panel = document.getElementById('chart-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+
+  async function loadVolumeChart() {
+    try {
+      const res = await fetch('/dashboard/api/stats/daily');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const days = [];
+      const today = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today); d.setDate(today.getDate() - i);
+        days.push(d.toISOString().slice(0, 10));
+      }
+      const lookup = Object.fromEntries(data.map(r => [r.day, r.count]));
+      const counts = days.map(d => lookup[d] || 0);
+      const labels = days.map(d => {
+        const dt = new Date(d + 'T00:00:00Z');
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+
+      const ctx = document.getElementById('volume-chart').getContext('2d');
+      if (volumeChart) {
+        volumeChart.data.labels = labels;
+        volumeChart.data.datasets[0].data = counts;
+        volumeChart.update();
+        return;
+      }
+      volumeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Calls',
+            data: counts,
+            backgroundColor: '#f59e0b',
+            borderColor: '#d97706',
+            borderWidth: 1,
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+          },
+        },
+      });
+    } catch (err) {
+      console.error('Chart load error:', err);
+    }
+  }
+
+  // ── Admin controls ────────────────────────────────────────────────────────
+  let adminLoaded = false;
+  async function toggleAdminPanel() {
+    const panel = document.getElementById('admin-panel');
+    const showing = panel.style.display === 'none';
+    panel.style.display = showing ? 'block' : 'none';
+    if (showing && !adminLoaded) {
+      await loadAdminSettings();
+      await loadBlocklist();
+      await loadRateLimited();
+      adminLoaded = true;
+    }
+  }
+
+  async function loadAdminSettings() {
+    const res = await adminFetch('/dashboard/api/settings');
+    if (!res || !res.ok) return;
+    const s = await res.json();
+    document.getElementById('toggle-unavailable').checked = !!s.unavailable;
+    document.getElementById('unavailable-label').textContent = s.unavailable ? 'Unavailable' : 'Available';
+    document.getElementById('unavailable-banner').style.display = s.unavailable ? 'block' : 'none';
+    document.getElementById('rate-limit-input').value = s.rateLimit ?? 20;
+  }
+
+  async function saveUnavailable() {
+    const checked = document.getElementById('toggle-unavailable').checked;
+    const res = await adminFetch('/dashboard/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unavailable: checked }),
+    });
+    if (!res || !res.ok) {
+      alert('Failed to save setting.');
+      document.getElementById('toggle-unavailable').checked = !checked;
+      return;
+    }
+    document.getElementById('unavailable-label').textContent = checked ? 'Unavailable' : 'Available';
+    document.getElementById('unavailable-banner').style.display = checked ? 'block' : 'none';
+  }
+
+  async function saveRateLimit() {
+    const val = parseInt(document.getElementById('rate-limit-input').value, 10);
+    if (!val || val < 1) { alert('Enter a positive number.'); return; }
+    const res = await adminFetch('/dashboard/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rateLimit: val }),
+    });
+    if (res && res.ok) {
+      loadRateLimited();
+    } else {
+      alert('Failed to save rate limit.');
+    }
+  }
+
+  async function loadBlocklist() {
+    const res = await adminFetch('/dashboard/api/blocklist');
+    if (!res || !res.ok) return;
+    const list = await res.json();
+    const ul = document.getElementById('blocklist-list');
+    if (!list.length) {
+      ul.innerHTML = '<li class="blocklist-empty">No blocked numbers.</li>';
+      return;
+    }
+    ul.innerHTML = list.map(b => `
+      <li>
+        <span>${escapeHtml(b.number)}${b.reason ? ` <span style="color:var(--muted);font-family:system-ui;font-size:.75rem">— ${escapeHtml(b.reason)}</span>` : ''}</span>
+        <button class="remove-btn" onclick="removeBlocklist(${b.id})" title="Remove">✕</button>
+      </li>
+    `).join('');
+  }
+
+  async function addBlocklist() {
+    const number = document.getElementById('block-number').value.trim();
+    const reason = document.getElementById('block-reason').value.trim();
+    if (!number) { alert('Enter a number to block.'); return; }
+    const res = await adminFetch('/dashboard/api/blocklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, reason }),
+    });
+    if (res && res.ok) {
+      document.getElementById('block-number').value = '';
+      document.getElementById('block-reason').value = '';
+      loadBlocklist();
+    } else {
+      alert('Failed to add to blocklist.');
+    }
+  }
+
+  async function removeBlocklist(id) {
+    const res = await adminFetch(`/dashboard/api/blocklist/${id}`, { method: 'DELETE' });
+    if (res && res.ok) loadBlocklist();
+  }
+
+  async function loadRateLimited() {
+    const res = await adminFetch('/dashboard/api/rate-limited');
+    if (!res || !res.ok) return;
+    const list = await res.json();
+    const ul = document.getElementById('rate-limited-list');
+    if (!list.length) {
+      ul.innerHTML = '<li class="rate-limited-empty">No callers currently rate-limited.</li>';
+      return;
+    }
+    ul.innerHTML = list.map(r => `<li><span>${escapeHtml(r.caller_number)}</span><span>${r.call_count} calls</span></li>`).join('');
+  }
+
+  // Light-touch unavailable banner check (no auth needed since calls API is public)
+  async function refreshUnavailableBanner() {
+    // Banner state is set by loadAdminSettings when admin opens panel.
+    // For non-admin viewers we don't know unavailable state — leave hidden.
+  }
+
   // Auto-refresh every 30s
   loadStats();
   loadCalls(0);
-  setInterval(() => { loadStats(); loadCalls(currentOffset); }, 30000);
+  loadVolumeChart();
+  setInterval(() => {
+    loadStats();
+    loadCalls(currentOffset);
+    loadVolumeChart();
+    if (adminLoaded) loadRateLimited();
+  }, 30000);
 </script>
 </body>
 </html>

@@ -31,18 +31,80 @@ const config = {
 
   // ── Configurable messages ──────────────────────────────────────────────────
 
-  greeting:
+  // Rotating greetings for first-time callers — each includes "Press 9 to repeat"
+  greetings: [
     "Thank you for calling Harold's Hotline. " +
-    'Press 1 to leave Harold a confession. ' +
-    'Press 2 to speak to Harold. ' +
-    'Press 3 to ask Harold for advice. ' +
-    'Press 4 for words of wisdom from Harold.',
+    "Press 1 to leave Harold a confession. " +
+    "Press 2 to speak to Harold. " +
+    "Press 3 to ask Harold for advice. " +
+    "Press 4 for words of wisdom from Harold. " +
+    "Press 9 to hear these options again.",
+
+    "You've reached Harold's Hotline, where one very opinionated cat is standing by. " +
+    "Press 1 to confess something. " +
+    "Press 2 to speak directly to Harold. " +
+    "Press 3 for Harold's expert advice. " +
+    "Press 4 for Harold's words of wisdom. " +
+    "Press 9 to hear these options again.",
+
+    "Welcome to Harold's Hotline. Harold is busy, so please listen carefully. " +
+    "Press 1 to leave a confession. " +
+    "Press 2 to speak with Harold. " +
+    "Press 3 for advice from Harold. " +
+    "Press 4 for Harold's wisdom. " +
+    "Press 9 to repeat these options.",
+
+    "Harold's Hotline. A very judgmental tabby cat is waiting for your call. " +
+    "Press 1 for confessions. " +
+    "Press 2 to speak to Harold personally. " +
+    "Press 3 to ask Harold a question. " +
+    "Press 4 for words of wisdom. " +
+    "Press 9 to hear these options again.",
+  ],
+
+  // Greetings for returning callers
+  returningGreetings: [
+    "Welcome back to Harold's Hotline. Harold noticed you've called before and is mildly impressed. " +
+    "Press 1 to leave Harold a confession. " +
+    "Press 2 to speak to Harold. " +
+    "Press 3 to ask Harold for advice. " +
+    "Press 4 for words of wisdom from Harold. " +
+    "Press 9 to hear these options again.",
+
+    "You're back at Harold's Hotline. Harold would have been expecting your call if he weren't napping. " +
+    "Press 1 to confess something. " +
+    "Press 2 to speak directly to Harold. " +
+    "Press 3 for Harold's advice. " +
+    "Press 4 for Harold's wisdom. " +
+    "Press 9 to repeat these options.",
+
+    "Harold's Hotline — a returning caller, no less. Harold is not surprised. His charisma is irresistible. " +
+    "Press 1 for confessions. " +
+    "Press 2 to speak with Harold. " +
+    "Press 3 for advice. " +
+    "Press 4 for wisdom. " +
+    "Press 9 to hear these options again.",
+  ],
+
+  // Kept for reprompt in menu fallback
+  greeting:
+    "Press 1 to leave Harold a confession. " +
+    "Press 2 to speak to Harold. " +
+    "Press 3 to ask Harold for advice. " +
+    "Press 4 for words of wisdom from Harold. " +
+    "Press 9 to hear these options again.",
 
   recordingDisclosure:
     "Please note, Harold may record this call to listen to after his nap.",
 
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
+
+  unavailableMessage:
+    "Harold's Hotline is temporarily unavailable. Harold is either very deeply asleep or has stepped out. Please try again later.",
+
+  rateLimitMessage:
+    "We are unable to process your call at this time. Please try again later.",
 
   // Confession flow
   confession: {
@@ -56,22 +118,21 @@ const config = {
 
   // Speak-to-Harold flow
   speak: {
-    // Shown before hold music + Harold audio
     introExcuses: [
       "Please hold while Harold comes to the phone. He's currently waking up from a nap.",
       "Please hold while Harold comes to the phone. He's watching a chipmunk and will be right with you.",
       "Please hold while Harold comes to the phone. He's currently sitting in a paper bag.",
       "Please hold while Harold comes to the phone. He's staring intensely at the wall and needs a moment.",
       "Please hold while Harold comes to the phone. He's knocking items off the counter and will be right there.",
-      "Please hold while Harold comes to the phone. He's loafing in a sunbeam and it may take a minute.",
       "Please hold while Harold comes to the phone. He's conducting an important investigation behind the couch.",
+      "Please hold while Harold comes to the phone. He's reorganizing the blanket pile and will be right with you.",
+      "Please hold while Harold comes to the phone. He has located a rogue piece of string and must address it immediately.",
     ],
-    // Shown after Harold audio ends — explain why he had to go
     exitExcuses: [
       "Harold unfortunately had to return to his nap. He hopes you understand.",
       "Harold has been called away by the sound of a treat bag. He sends his regards.",
       "Harold spotted a suspicious bird through the window and had to investigate immediately.",
-      "Harold had an urgent appointment with the sunny spot on the rug. He apologizes for the inconvenience.",
+      "Harold had an urgent appointment with the warm spot on the rug. He apologizes for the inconvenience.",
       "Harold received an emergency alert that his food bowl was thirty percent empty. He had to respond.",
       "Harold was called back to his post monitoring the front door for the mailman.",
       "It appears Harold has fallen back asleep mid-conversation. Classic Harold.",
@@ -109,7 +170,7 @@ const config = {
       "Never apologize for taking up space. You belong exactly where you are.",
       "The sound of a treat bag is the most important sound in the universe. Train yourself to hear it from any room.",
       "Sometimes the only appropriate response to a difficult day is to stare at a wall for twenty minutes.",
-      "Find your sunbeam and defend it. This is not optional.",
+      "Claim the best spot in every room you enter. You have earned it.",
       "If someone is sad, sit near them. You do not need to fix anything. Just be there.",
       "Your belly is your own business. You are under no obligation to share it with anyone.",
       "A thorough stretch in the morning sets the tone for the entire day. Never skip it.",
@@ -126,9 +187,11 @@ function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-config.pickIntroExcuse = () => pickRandom(config.speak.introExcuses);
-config.pickExitExcuse  = () => pickRandom(config.speak.exitExcuses);
-config.pickWisdom      = () => pickRandom(config.wisdom.lines);
+config.pickGreeting          = () => pickRandom(config.greetings);
+config.pickReturningGreeting = () => pickRandom(config.returningGreetings);
+config.pickIntroExcuse       = () => pickRandom(config.speak.introExcuses);
+config.pickExitExcuse        = () => pickRandom(config.speak.exitExcuses);
+config.pickWisdom            = () => pickRandom(config.wisdom.lines);
 
 function socialFollow() {
   const ig = config.haroldInstagram;

@@ -62,12 +62,31 @@ router.get('/api/stats', (req, res) => {
   res.json(db.stats());
 });
 
-router.get('/api/calls', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+router.get('/api/stats/daily', (req, res) => {
+  res.json(db.statsDaily());
+});
+
+// Search must be registered before /:id to avoid route conflict
+router.get('/api/calls/search', (req, res) => {
+  const q = (req.query.q || '').trim();
+  const limit  = Math.min(parseInt(req.query.limit  || '25', 10), 200);
   const offset = parseInt(req.query.offset || '0', 10);
+  if (!q) return res.json({ calls: [], total: 0, limit, offset });
+  const calls = db.searchCalls(q, limit, offset);
+  const total = db.countSearchCalls(q);
+  res.json({ calls, total, limit, offset });
+});
+
+router.get('/api/calls', (req, res) => {
+  const limit        = Math.min(parseInt(req.query.limit  || '50', 10), 200);
+  const offset       = parseInt(req.query.offset || '0', 10);
   const hasRecording = req.query.hasRecording === '1';
-  const calls = hasRecording ? db.listCallsWithRecording(limit, offset) : db.listCalls(limit, offset);
-  const total = hasRecording ? db.countCallsWithRecording() : db.countCalls();
+  const callType     = req.query.type || null;
+  const dateFrom     = req.query.from || null;
+  const dateTo       = req.query.to   || null;
+
+  const calls = db.listCallsFiltered({ limit, offset, hasRecording, callType, dateFrom, dateTo });
+  const total = db.countCallsFiltered({ hasRecording, callType, dateFrom, dateTo });
   res.json({ calls, total, limit, offset });
 });
 
@@ -104,6 +123,47 @@ router.get('/api/calls/:id/recording', async (req, res) => {
     console.error('Recording proxy error:', err);
     res.status(500).json({ error: 'Internal error fetching recording' });
   }
+});
+
+// ── Blocklist ─────────────────────────────────────────────────────────────────
+
+router.get('/api/blocklist', adminAuth, (req, res) => {
+  res.json(db.listBlocklist());
+});
+
+router.post('/api/blocklist', adminAuth, (req, res) => {
+  const { number, reason } = req.body;
+  if (!number || !number.trim()) return res.status(400).json({ error: 'number is required' });
+  db.addToBlocklist(number.trim(), reason || null);
+  res.json({ success: true });
+});
+
+router.delete('/api/blocklist/:id', adminAuth, (req, res) => {
+  db.removeFromBlocklist(parseInt(req.params.id, 10));
+  res.json({ success: true });
+});
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+router.get('/api/settings', adminAuth, (req, res) => {
+  res.json({
+    unavailable: db.getSetting('unavailable') === 'true',
+    rateLimit:   parseInt(db.getSetting('rate_limit') || '20', 10),
+  });
+});
+
+router.patch('/api/settings', adminAuth, (req, res) => {
+  const { unavailable, rateLimit } = req.body;
+  if (unavailable !== undefined) db.setSetting('unavailable', unavailable ? 'true' : 'false');
+  if (rateLimit    !== undefined) db.setSetting('rate_limit', String(Math.max(1, parseInt(rateLimit, 10) || 20)));
+  res.json({ success: true });
+});
+
+// ── Rate-limited callers ──────────────────────────────────────────────────────
+
+router.get('/api/rate-limited', adminAuth, (req, res) => {
+  const limit = parseInt(db.getSetting('rate_limit') || '20', 10);
+  res.json(db.getRateLimitedCallers(limit));
 });
 
 // ── Voiceover generator ───────────────────────────────────────────────────────
