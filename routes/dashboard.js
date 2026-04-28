@@ -134,7 +134,7 @@ router.post('/api/voiceover', adminAuth, async (req, res) => {
 // ── Generate social post ──────────────────────────────────────────────────────
 const TYPE_LABELS = {
   confession: 'confession',
-  question:   'question',
+  question:   'advice request',
   speak:      'message',
 };
 
