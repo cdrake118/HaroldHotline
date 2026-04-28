@@ -36,7 +36,7 @@ const config = {
     'Press 1 to leave Harold a confession. ' +
     'Press 2 to speak to Harold. ' +
     'Press 3 to ask Harold a question. ' +
-    'Press 4 for words of wisdom.',
+    'Press 4 for words of wisdom from Harold.',
 
   recordingDisclosure:
     "Please note, Harold may record this call to listen to later, ideally from a sunbeam.",
@@ -160,9 +160,6 @@ config.speak.messageThankYouMessage = () => {
   return `Thank you for leaving Harold a message. He will consider it when he is done napping.${cta ? ' ' + cta : ''} Have a wonderful day!`;
 };
 
-config.wisdom.thankYouMessage = () => {
-  const cta = socialCta();
-  return `Harold hopes his wisdom serves you well.${cta ? ' ' + cta : ''} Have a wonderful day!`;
-};
+config.wisdom.thankYouMessage = () => 'Harold hopes his wisdom serves you well. Have a wonderful day!';
 
 module.exports = config;
