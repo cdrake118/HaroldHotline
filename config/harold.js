@@ -39,7 +39,7 @@ const config = {
     'Press 4 for words of wisdom from Harold.',
 
   recordingDisclosure:
-    "Please note, Harold may record this call to listen to later, ideally from a sunbeam.",
+    "Please note, Harold may record this call to listen to after his nap.",
 
   noInputMessage:
     "We didn't catch your selection. Thank you for calling Harold's Hotline. Goodbye!",
