@@ -130,6 +130,16 @@ config.pickIntroExcuse = () => pickRandom(config.speak.introExcuses);
 config.pickExitExcuse  = () => pickRandom(config.speak.exitExcuses);
 config.pickWisdom      = () => pickRandom(config.wisdom.lines);
 
+function socialFollow() {
+  const ig = config.haroldInstagram;
+  const tt = config.haroldTikTok;
+  if (ig && tt && ig === tt) return `Find Harold on Instagram and TikTok at ${ig}.`;
+  if (ig && tt) return `Find Harold on Instagram at ${ig} and TikTok at ${tt}.`;
+  if (ig) return `Find Harold on Instagram at ${ig}.`;
+  if (tt) return `Find Harold on TikTok at ${tt}.`;
+  return '';
+}
+
 function socialCta() {
   const ig = config.haroldInstagram;
   const tt = config.haroldTikTok;
@@ -160,6 +170,9 @@ config.speak.messageThankYouMessage = () => {
   return `Thank you for leaving Harold a message. He will consider it when he is done napping.${cta ? ' ' + cta : ''} Have a wonderful day!`;
 };
 
-config.wisdom.thankYouMessage = () => 'Harold hopes his wisdom serves you well. Have a wonderful day!';
+config.wisdom.thankYouMessage = () => {
+  const follow = socialFollow();
+  return `Harold hopes his wisdom serves you well.${follow ? ' ' + follow : ''} Have a wonderful day!`;
+};
 
 module.exports = config;
