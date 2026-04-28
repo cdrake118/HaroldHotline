@@ -28,6 +28,12 @@
       z-index: 0;
     }
 
+    /* Clips rays SVG so it can't cause horizontal scroll */
+    .page-wrap {
+      position: relative;
+      overflow: hidden;
+    }
+
     /* Centered content column */
     .poster {
       position: relative;
@@ -89,21 +95,21 @@
     }
     .portrait-frame {
       width: min(72vw, 360px);
-      aspect-ratio: 1;
+      height: min(72vw, 360px);
       border-radius: 50%;
       border: 3px solid #ffd84d;
-      padding: 8px;
+      position: relative;
       background: #1a1238;
       box-shadow: 0 0 0 8px #1a1238, 0 0 0 11px #ff3d8b, 0 0 60px rgba(255,61,139,.4);
       flex-shrink: 0;
     }
     .portrait-inner {
-      width: 100%;
-      height: 100%;
+      position: absolute;
+      inset: 8px;
+      top: 8px; right: 8px; bottom: 8px; left: 8px; /* fallback for older Safari */
       border-radius: 50%;
       overflow: hidden;
       background: #0d0820;
-      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -305,9 +311,12 @@
   <g id="stars"></g>
 </svg>
 
-<!-- Starburst rays — fixed 6000×6000 SVG, GPU-composited via transform -->
+<!-- page-wrap: clips rays SVG, does not affect position:fixed elements -->
+<div class="page-wrap">
+
+<!-- Rays SVG: position:absolute so it scrolls with Harold — no JS needed on scroll -->
 <svg id="rays-svg" xmlns="http://www.w3.org/2000/svg"
-     style="position:fixed;top:0;left:0;width:6000px;height:6000px;will-change:transform;pointer-events:none;z-index:0;opacity:.9">
+     style="position:absolute;top:0;left:0;width:6000px;height:6000px;pointer-events:none;z-index:0;opacity:.9">
   <g id="rays"></g>
 </svg>
 
@@ -402,11 +411,12 @@
 
 </div>
 
+</div><!-- /.page-wrap -->
+
 <script>
   // Rays drawn from the centre of the 6000×6000 SVG (HALF, HALF).
-  // The whole SVG is then repositioned via CSS transform so that centre
-  // lands on Harold's portrait — one GPU-composited property update per
-  // frame instead of 36 setAttribute calls, eliminating scroll jitter.
+  // The SVG is position:absolute so it scrolls with Harold naturally —
+  // no scroll listener needed, which eliminates all jitter.
   const NS = 'http://www.w3.org/2000/svg';
   const HALF = 3000;
   const raysEl = document.getElementById('rays');
@@ -425,24 +435,20 @@
     raysEl.appendChild(line);
   }
 
-  // Translate the SVG so its centre (HALF, HALF) sits on Harold's portrait centre
-  let rafPending = false;
-  function doPositionRays() {
+  // Place the SVG using page (document) coordinates — called once, then again
+  // after fonts load (which can shift text heights above the portrait).
+  function positionRaysSvg() {
     const frame = document.querySelector('.portrait-frame');
-    if (frame) {
-      const r = frame.getBoundingClientRect();
-      const cx = r.left + r.width  / 2;
-      const cy = r.top  + r.height / 2;
-      raysSvg.style.transform = `translate(${cx - HALF}px,${cy - HALF}px)`;
-    }
-    rafPending = false;
+    if (!frame) return;
+    const r = frame.getBoundingClientRect();
+    const cx = r.left + r.width  / 2 + window.scrollX;
+    const cy = r.top  + r.height / 2 + window.scrollY;
+    raysSvg.style.left = (cx - HALF) + 'px';
+    raysSvg.style.top  = (cy - HALF) + 'px';
   }
-  function positionRays() {
-    if (!rafPending) { rafPending = true; requestAnimationFrame(doPositionRays); }
-  }
-  positionRays();
-  window.addEventListener('scroll', positionRays, { passive: true });
-  window.addEventListener('resize', positionRays);
+  positionRaysSvg();
+  window.addEventListener('resize', positionRaysSvg);
+  document.fonts.ready.then(positionRaysSvg);
 
   // Load live call stats
   fetch('/api/stats').then(r => r.ok ? r.json() : null).then(s => {
