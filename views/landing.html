@@ -293,7 +293,7 @@
 </head>
 <body>
 
-<!-- Decorative background: radial gradient + starburst rays + star dots -->
+<!-- Fixed background: radial gradient + scattered star dots -->
 <svg class="poster-bg" viewBox="0 0 850 1100" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="psychicGlow" cx="50%" cy="42%" r="60%">
@@ -302,8 +302,13 @@
     </radialGradient>
   </defs>
   <rect width="850" height="1100" fill="url(#psychicGlow)" />
-  <g id="rays"></g>
   <g id="stars"></g>
+</svg>
+
+<!-- Starburst rays — fixed, kept centred on Harold's portrait by JS -->
+<svg id="rays-svg" xmlns="http://www.w3.org/2000/svg"
+     style="position:fixed;top:0;left:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:0;opacity:.9">
+  <g id="rays"></g>
 </svg>
 
 <div class="poster">
@@ -398,21 +403,34 @@
 </div>
 
 <script>
-  // Populate SVG background: 36 starburst rays from (425, 480)
+  // Build starburst rays emanating from (0,0) — the SVG is repositioned by JS
   const NS = 'http://www.w3.org/2000/svg';
   const raysEl = document.getElementById('rays');
   for (let i = 0; i < 36; i++) {
     const a = (i * 10 - 90) * Math.PI / 180;
     const line = document.createElementNS(NS, 'line');
-    line.setAttribute('x1', '425');
-    line.setAttribute('y1', '480');
-    line.setAttribute('x2', String(425 + Math.cos(a) * 800));
-    line.setAttribute('y2', String(480 + Math.sin(a) * 800));
+    line.setAttribute('x1', '0');
+    line.setAttribute('y1', '0');
+    line.setAttribute('x2', String(Math.cos(a) * 2000));
+    line.setAttribute('y2', String(Math.sin(a) * 2000));
     line.setAttribute('stroke', '#b89dff');
     line.setAttribute('stroke-width', i % 2 ? '0.4' : '0.8');
     line.setAttribute('opacity', '0.25');
     raysEl.appendChild(line);
   }
+
+  // Keep the rays SVG centred on Harold's portrait as the page scrolls/resizes
+  const raysSvg = document.getElementById('rays-svg');
+  function positionRays() {
+    const frame = document.querySelector('.portrait-frame');
+    if (!frame || !raysSvg) return;
+    const r = frame.getBoundingClientRect();
+    raysSvg.style.left = (r.left + r.width  / 2) + 'px';
+    raysSvg.style.top  = (r.top  + r.height / 2) + 'px';
+  }
+  positionRays();
+  window.addEventListener('scroll',  positionRays);
+  window.addEventListener('resize',  positionRays);
 
   // Load live call stats
   fetch('/api/stats').then(r => r.ok ? r.json() : null).then(s => {
