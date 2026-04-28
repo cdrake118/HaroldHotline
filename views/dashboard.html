@@ -320,7 +320,10 @@
 <section class="calls-section">
   <div class="section-header">
     <h2>Recent Calls</h2>
-    <button class="refresh-btn" onclick="loadCalls(currentOffset)">↻ Refresh</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="refresh-btn" id="btn-filter-recording" onclick="toggleRecordingFilter()" title="Show only calls with a recording">🎙 Has Recording</button>
+      <button class="refresh-btn" onclick="loadCalls(0)">↻ Refresh</button>
+    </div>
   </div>
 
   <div class="calls-table">
@@ -351,6 +354,15 @@
   const PAGE_SIZE = 25;
   let currentOffset = 0;
   let totalCalls = 0;
+  let filterRecording = false;
+
+  function toggleRecordingFilter() {
+    filterRecording = !filterRecording;
+    const btn = document.getElementById('btn-filter-recording');
+    btn.style.background = filterRecording ? 'var(--accent)' : '';
+    btn.style.color = filterRecording ? '#fff' : '';
+    loadCalls(0);
+  }
 
   function maskNumber(num) {
     return num || '—';
@@ -469,7 +481,7 @@
     const tbody = document.getElementById('calls-body');
     tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading…</td></tr>';
 
-    const res = await fetch(`/dashboard/api/calls?limit=${PAGE_SIZE}&offset=${offset}`);
+    const res = await fetch(`/dashboard/api/calls?limit=${PAGE_SIZE}&offset=${offset}${filterRecording ? '&hasRecording=1' : ''}`);
     if (!res.ok) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty"><span class="cat">😿</span>Failed to load calls.</td></tr>';
       return;

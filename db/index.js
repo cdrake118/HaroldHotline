@@ -85,7 +85,13 @@ const stmts = {
     SELECT * FROM calls ORDER BY created_at DESC LIMIT ? OFFSET ?
   `),
 
+  listCallsWithRecording: db.prepare(`
+    SELECT * FROM calls WHERE recording_url IS NOT NULL ORDER BY created_at DESC LIMIT ? OFFSET ?
+  `),
+
   countCalls: db.prepare(`SELECT COUNT(*) as total FROM calls`),
+
+  countCallsWithRecording: db.prepare(`SELECT COUNT(*) as total FROM calls WHERE recording_url IS NOT NULL`),
 
   stats: db.prepare(`
     SELECT
@@ -127,7 +133,11 @@ module.exports = {
 
   listCalls: (limit = 50, offset = 0) => stmts.listCalls.all(limit, offset),
 
+  listCallsWithRecording: (limit = 50, offset = 0) => stmts.listCallsWithRecording.all(limit, offset),
+
   countCalls: () => stmts.countCalls.get().total,
+
+  countCallsWithRecording: () => stmts.countCallsWithRecording.get().total,
 
   stats: () => stmts.stats.get(),
 };

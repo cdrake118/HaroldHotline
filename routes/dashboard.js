@@ -65,8 +65,9 @@ router.get('/api/stats', (req, res) => {
 router.get('/api/calls', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
   const offset = parseInt(req.query.offset || '0', 10);
-  const calls = db.listCalls(limit, offset);
-  const total = db.countCalls();
+  const hasRecording = req.query.hasRecording === '1';
+  const calls = hasRecording ? db.listCallsWithRecording(limit, offset) : db.listCalls(limit, offset);
+  const total = hasRecording ? db.countCallsWithRecording() : db.countCalls();
   res.json({ calls, total, limit, offset });
 });
 

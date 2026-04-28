@@ -20,6 +20,9 @@ function audioOrPause(node, url, pauseSecs) {
 // Twilio calls this webhook when someone dials the Harold Hotline number.
 // Set this as the "A call comes in" webhook in your Twilio phone number config.
 router.post('/incoming', (req, res) => {
+  const { CallSid, From } = req.body;
+  db.upsertCall(CallSid, From, null);
+
   const twiml = new twilio.twiml.VoiceResponse();
 
   const gather = twiml.gather({
