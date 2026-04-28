@@ -86,6 +86,11 @@
       transition: background .15s;
     }
     .refresh-btn:hover { background: var(--amber-dk); }
+    .refresh-btn.active {
+      background: var(--green);
+      box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--green);
+    }
+    .refresh-btn.active:hover { background: #15803d; }
 
     .calls-table {
       background: var(--surface);
@@ -358,9 +363,7 @@
 
   function toggleRecordingFilter() {
     filterRecording = !filterRecording;
-    const btn = document.getElementById('btn-filter-recording');
-    btn.style.background = filterRecording ? 'var(--accent)' : '';
-    btn.style.color = filterRecording ? '#fff' : '';
+    document.getElementById('btn-filter-recording').classList.toggle('active', filterRecording);
     loadCalls(0);
   }
 
@@ -434,7 +437,8 @@
 
   function formatDate(iso) {
     if (!iso) return '—';
-    const d = new Date(iso);
+    // SQLite CURRENT_TIMESTAMP has no timezone marker — append Z to treat as UTC
+    const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
     const tz = { timeZone: 'America/New_York' };
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...tz }) +
       ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', ...tz });
