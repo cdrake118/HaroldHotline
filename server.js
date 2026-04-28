@@ -44,7 +44,7 @@ app.get('/', (req, res) => {
     : raw;
 
   const haroldPhoto = process.env.HAROLD_PHOTO_URL
-    ? `<img src="${process.env.HAROLD_PHOTO_URL}" alt="Harold">`
+    ? `<img src="${process.env.HAROLD_PHOTO_URL}" alt="Harold" width="360" height="360">`
     : '🐱';
 
   const ig = config.haroldInstagram;

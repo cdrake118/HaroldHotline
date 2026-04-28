@@ -89,7 +89,7 @@
     }
     .portrait-frame {
       width: min(72vw, 360px);
-      height: min(72vw, 360px);
+      aspect-ratio: 1;
       border-radius: 50%;
       border: 3px solid #ffd84d;
       padding: 8px;
@@ -305,9 +305,9 @@
   <g id="stars"></g>
 </svg>
 
-<!-- Starburst rays — fixed full-viewport SVG; JS updates line endpoints on scroll -->
+<!-- Starburst rays — fixed 6000×6000 SVG, GPU-composited via transform -->
 <svg id="rays-svg" xmlns="http://www.w3.org/2000/svg"
-     style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.9;overflow:visible">
+     style="position:fixed;top:0;left:0;width:6000px;height:6000px;will-change:transform;pointer-events:none;z-index:0;opacity:.9">
   <g id="rays"></g>
 </svg>
 
@@ -403,38 +403,46 @@
 </div>
 
 <script>
-  // Build starburst rays; x1/y1/x2/y2 are set in viewport px by positionRays()
+  // Rays drawn from the centre of the 6000×6000 SVG (HALF, HALF).
+  // The whole SVG is then repositioned via CSS transform so that centre
+  // lands on Harold's portrait — one GPU-composited property update per
+  // frame instead of 36 setAttribute calls, eliminating scroll jitter.
   const NS = 'http://www.w3.org/2000/svg';
+  const HALF = 3000;
   const raysEl = document.getElementById('rays');
-  const rayLines = [];
+  const raysSvg = document.getElementById('rays-svg');
+
   for (let i = 0; i < 36; i++) {
     const a = (i * 10 - 90) * Math.PI / 180;
     const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', String(HALF));
+    line.setAttribute('y1', String(HALF));
+    line.setAttribute('x2', String(HALF + Math.cos(a) * HALF));
+    line.setAttribute('y2', String(HALF + Math.sin(a) * HALF));
     line.setAttribute('stroke', '#b89dff');
     line.setAttribute('stroke-width', i % 2 ? '0.4' : '0.8');
     line.setAttribute('opacity', '0.25');
     raysEl.appendChild(line);
-    rayLines.push({ el: line, cos: Math.cos(a), sin: Math.sin(a) });
   }
 
-  // Update ray endpoints to radiate from Harold's portrait centre (viewport coords)
-  function positionRays() {
+  // Translate the SVG so its centre (HALF, HALF) sits on Harold's portrait centre
+  let rafPending = false;
+  function doPositionRays() {
     const frame = document.querySelector('.portrait-frame');
-    if (!frame) return;
-    const r = frame.getBoundingClientRect();
-    const cx = r.left + r.width  / 2;
-    const cy = r.top  + r.height / 2;
-    const len = 3000;
-    for (const { el, cos, sin } of rayLines) {
-      el.setAttribute('x1', String(cx));
-      el.setAttribute('y1', String(cy));
-      el.setAttribute('x2', String(cx + cos * len));
-      el.setAttribute('y2', String(cy + sin * len));
+    if (frame) {
+      const r = frame.getBoundingClientRect();
+      const cx = r.left + r.width  / 2;
+      const cy = r.top  + r.height / 2;
+      raysSvg.style.transform = `translate(${cx - HALF}px,${cy - HALF}px)`;
     }
+    rafPending = false;
+  }
+  function positionRays() {
+    if (!rafPending) { rafPending = true; requestAnimationFrame(doPositionRays); }
   }
   positionRays();
-  window.addEventListener('scroll',  positionRays, { passive: true });
-  window.addEventListener('resize',  positionRays);
+  window.addEventListener('scroll', positionRays, { passive: true });
+  window.addEventListener('resize', positionRays);
 
   // Load live call stats
   fetch('/api/stats').then(r => r.ok ? r.json() : null).then(s => {
