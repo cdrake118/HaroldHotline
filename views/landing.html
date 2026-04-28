@@ -305,9 +305,9 @@
   <g id="stars"></g>
 </svg>
 
-<!-- Starburst rays — fixed, kept centred on Harold's portrait by JS -->
+<!-- Starburst rays — fixed full-viewport SVG; JS updates line endpoints on scroll -->
 <svg id="rays-svg" xmlns="http://www.w3.org/2000/svg"
-     style="position:fixed;top:0;left:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:0;opacity:.9">
+     style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.9;overflow:visible">
   <g id="rays"></g>
 </svg>
 
@@ -403,33 +403,37 @@
 </div>
 
 <script>
-  // Build starburst rays emanating from (0,0) — the SVG is repositioned by JS
+  // Build starburst rays; x1/y1/x2/y2 are set in viewport px by positionRays()
   const NS = 'http://www.w3.org/2000/svg';
   const raysEl = document.getElementById('rays');
+  const rayLines = [];
   for (let i = 0; i < 36; i++) {
     const a = (i * 10 - 90) * Math.PI / 180;
     const line = document.createElementNS(NS, 'line');
-    line.setAttribute('x1', '0');
-    line.setAttribute('y1', '0');
-    line.setAttribute('x2', String(Math.cos(a) * 2000));
-    line.setAttribute('y2', String(Math.sin(a) * 2000));
     line.setAttribute('stroke', '#b89dff');
     line.setAttribute('stroke-width', i % 2 ? '0.4' : '0.8');
     line.setAttribute('opacity', '0.25');
     raysEl.appendChild(line);
+    rayLines.push({ el: line, cos: Math.cos(a), sin: Math.sin(a) });
   }
 
-  // Keep the rays SVG centred on Harold's portrait as the page scrolls/resizes
-  const raysSvg = document.getElementById('rays-svg');
+  // Update ray endpoints to radiate from Harold's portrait centre (viewport coords)
   function positionRays() {
     const frame = document.querySelector('.portrait-frame');
-    if (!frame || !raysSvg) return;
+    if (!frame) return;
     const r = frame.getBoundingClientRect();
-    raysSvg.style.left = (r.left + r.width  / 2) + 'px';
-    raysSvg.style.top  = (r.top  + r.height / 2) + 'px';
+    const cx = r.left + r.width  / 2;
+    const cy = r.top  + r.height / 2;
+    const len = 3000;
+    for (const { el, cos, sin } of rayLines) {
+      el.setAttribute('x1', String(cx));
+      el.setAttribute('y1', String(cy));
+      el.setAttribute('x2', String(cx + cos * len));
+      el.setAttribute('y2', String(cy + sin * len));
+    }
   }
   positionRays();
-  window.addEventListener('scroll',  positionRays);
+  window.addEventListener('scroll',  positionRays, { passive: true });
   window.addEventListener('resize',  positionRays);
 
   // Load live call stats
