@@ -272,6 +272,72 @@
     }
     .page-btn:hover:not(:disabled) { background: var(--amber-lt); border-color: var(--amber); }
     .page-btn:disabled { opacity: .4; cursor: default; }
+
+    /* ── Mobile responsive ───────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      header { padding: 1rem; }
+      header h1 { font-size: 1.3rem; }
+      header p  { font-size: .8rem; }
+
+      .stats { padding: 1rem; gap: .5rem; }
+      .stat-card { min-width: 70px; padding: .6rem .75rem; }
+      .stat-card .value { font-size: 1.4rem; }
+
+      .calls-section { padding: 0 .75rem 1.5rem; }
+      .section-header { flex-wrap: wrap; gap: .5rem; }
+
+      /* Convert table to stacked cards */
+      .calls-table { border: none; background: transparent; box-shadow: none; border-radius: 0; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      thead { display: none; }
+
+      tbody tr {
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: .6rem;
+        padding: .6rem .75rem;
+        cursor: pointer;
+      }
+      tbody tr:hover, tbody tr.expanded { background: #fffbeb; }
+      tr.flagged-row    { background: #fff1f2 !important; border-color: #fca5a5; }
+      tr.flagged-row:hover { background: #ffe4e6 !important; }
+
+      td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: .25rem 0;
+        border: none;
+        font-size: .85rem;
+      }
+      td[data-label="#"] { display: none; }
+      td::before {
+        content: attr(data-label);
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        color: var(--muted);
+        flex-shrink: 0;
+        margin-right: .75rem;
+      }
+
+      /* Detail rows */
+      .detail-row { display: none !important; }
+      .detail-row.open { display: block !important; margin-top: -.6rem; margin-bottom: .6rem; }
+      .detail-row.open td { display: block; padding: 0; }
+      .detail-row.open td::before { display: none; }
+      .detail-cell { border-radius: 0 0 10px 10px; border: 1.5px solid var(--border); border-top: none; }
+
+      /* Loading / empty full-width cells */
+      td.loading, td.empty { justify-content: center; }
+      td.loading::before, td.empty::before { display: none; }
+
+      .voiceover-section { padding: 0 .75rem; }
+      .vo-row { flex-direction: column; align-items: stretch; }
+      .vo-row select, .vo-generate { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -503,12 +569,12 @@
 
     tbody.innerHTML = calls.map((call, i) => `
       <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
-        <td>${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
-        <td>${formatDate(call.created_at)}</td>
-        <td style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
-        <td>${typeBadge(call.call_type)}</td>
-        <td>${formatDuration(call.duration)}</td>
-        <td>${transcriptBadge(call.transcript_status)}</td>
+        <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
+        <td data-label="Date">${formatDate(call.created_at)}</td>
+        <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
+        <td data-label="Type">${typeBadge(call.call_type)}</td>
+        <td data-label="Duration">${formatDuration(call.duration)}</td>
+        <td data-label="Transcript">${transcriptBadge(call.transcript_status)}</td>
       </tr>
       <tr class="detail-row" id="detail-${call.id}">
         <td colspan="6" class="detail-cell">
