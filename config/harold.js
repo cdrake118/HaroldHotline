@@ -35,7 +35,7 @@ const config = {
     "Thank you for calling Harold's Hotline. " +
     'Press 1 to leave Harold a confession. ' +
     'Press 2 to speak to Harold. ' +
-    'Press 3 to ask Harold a question. ' +
+    'Press 3 to ask Harold for advice. ' +
     'Press 4 for words of wisdom from Harold.',
 
   recordingDisclosure:
@@ -84,12 +84,12 @@ const config = {
       "Please leave your message for Harold after the tone. When you are finished, press 1.",
   },
 
-  // Ask-Harold-a-Question flow
+  // Ask-Harold-for-Advice flow
   question: {
     recordingPrompt:
-      'Please leave your question for Harold after the tone. When you are finished, press 1.',
+      'Please leave your request for advice for Harold after the tone. When you are finished, press 1.',
     thankYouMessage: (instagram) =>
-      "Thank you for calling Harold's Hotline. Harold will consider your question." +
+      "Thank you for calling Harold's Hotline. Harold will consider your situation." +
       (instagram ? ` He may respond on his Instagram, ${instagram}.` : '') +
       ' Goodbye!',
   },
@@ -157,7 +157,7 @@ config.confession.thankYouMessage = () => {
 
 config.question.thankYouMessage = () => {
   const cta = socialCta();
-  return `Thank you for calling Harold's Hotline. Harold will consider your question.${cta ? ' ' + cta : ''} Goodbye!`;
+  return `Thank you for calling Harold's Hotline. Harold will consider your situation.${cta ? ' ' + cta : ''} Goodbye!`;
 };
 
 config.speak.thankYouMessage = () => {
