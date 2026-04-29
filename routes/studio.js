@@ -402,11 +402,11 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       const cTotalH = cLines.length * 52 + 30;
       const hTotalH = hLines.length * 52 + 30;
       const callerFilters = cLines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
         return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${cTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,0,${callerDur})'`;
       });
       const haroldFilters = hLines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
         return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${hTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='gte(t,${callerDur})'`;
       });
       captionFilters = [...callerFilters, ...haroldFilters].join(',');
@@ -414,7 +414,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       const lines  = wrapText(`"${haroldText}"`);
       const totalH = lines.length * 52 + 30;
       captionFilters = lines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
         return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${totalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
       }).join(',');
     }

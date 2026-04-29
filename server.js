@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const config = require('./config/harold');
@@ -7,14 +8,24 @@ const db = require('./db');
 
 const app = express();
 
+// gzip text responses (HTML, JSON, JS) — big win on the now-sizable dashboard/studio HTML
+app.use(compression());
+
 app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));   // base64 image/audio payloads can exceed default 100kb
+
+// Long-cache static media so browsers don't re-fetch on each dashboard render
+const STATIC_MAX_AGE = '7d';
 
 // Serve Harold audio files — AUDIO_DIR env var overrides the default for production
 const audioDir = process.env.AUDIO_DIR || path.join(__dirname, 'public', 'audio');
-app.use('/audio', express.static(audioDir));
+app.use('/audio', express.static(audioDir, { maxAge: STATIC_MAX_AGE, immutable: false }));
 
-// Serve other static assets (images, etc.)
+// Reference photos & gallery: long cache (filenames change when content changes)
+app.use('/harold-refs',    express.static(path.join(__dirname, 'public', 'harold-refs'),    { maxAge: STATIC_MAX_AGE }));
+app.use('/harold-gallery', express.static(path.join(__dirname, 'public', 'harold-gallery'), { maxAge: STATIC_MAX_AGE }));
+
+// Serve other static assets (favicon, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes

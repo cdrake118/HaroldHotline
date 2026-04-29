@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Harold's Free Hotline — Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1254,7 +1254,12 @@
   }
   loadStats();
   loadCalls(0);
-  loadVolumeChart();
+  // Chart.js is loaded with `defer` so wait for it before drawing the volume chart
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadVolumeChart);
+  } else {
+    loadVolumeChart();
+  }
 </script>
 </body>
 </html>

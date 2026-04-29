@@ -198,7 +198,11 @@
     <h1>Harold's Production Studio</h1>
     <p id="studio-subtitle">Generate fully synthetic call videos for social media</p>
   </div>
-  <a class="nav-link" href="/dashboard">← Back to Dashboard</a>
+  <span id="draft-indicator" style="font-size:.78rem;color:var(--muted);margin-left:auto;display:none">
+    <span id="draft-indicator-text">Draft saved</span>
+    <button onclick="clearDraft()" style="margin-left:8px;background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:.74rem">🗑 Clear draft</button>
+  </span>
+  <a class="nav-link" href="/dashboard" style="margin-left:14px">← Back to Dashboard</a>
 </header>
 
 <div class="studio-layout">
@@ -941,16 +945,149 @@
     return num;
   }
 
+  // -- Draft persistence (localStorage) ------------------------------------------
+  // Saves lightweight state only — text fields, params, voice selection, post.
+  // Skips binary blobs (audio/image) which are regenerable and would blow the
+  // ~5MB storage quota with a few drafts.
+  function draftKey() {
+    const callId = state.callContext?.id;
+    return callId ? `harold-studio-draft:${callId}` : 'harold-studio-draft:synthetic';
+  }
+
+  let saveDraftTimer = null;
+  function saveDraft() {
+    clearTimeout(saveDraftTimer);
+    saveDraftTimer = setTimeout(_writeDraft, 500);
+  }
+
+  function _writeDraft() {
+    try {
+      const draft = {
+        ts:             Date.now(),
+        params:         {
+          callType:      document.getElementById('call-type').value,
+          callerPersona: document.getElementById('caller-persona').value,
+          mood:          document.getElementById('mood').value,
+        },
+        scenario:       document.getElementById('scenario').value,
+        callerScript:   document.getElementById('caller-script').value,
+        haroldResponse: document.getElementById('harold-response').value,
+        voiceId:        document.getElementById('caller-voice-select').value,
+        postText:       document.getElementById('post-text').value,
+        useRecording:   state.useRecording,
+      };
+      // Only persist if there's something worth saving
+      const meaningful = draft.callerScript || draft.haroldResponse || draft.scenario || draft.postText;
+      if (!meaningful) { localStorage.removeItem(draftKey()); updateDraftIndicator(null); return; }
+      localStorage.setItem(draftKey(), JSON.stringify(draft));
+      updateDraftIndicator(draft.ts);
+    } catch (e) { /* quota or private mode — ignore */ }
+  }
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(draftKey());
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.params) {
+        if (d.params.callType)      document.getElementById('call-type').value      = d.params.callType;
+        if (d.params.callerPersona) document.getElementById('caller-persona').value = d.params.callerPersona;
+        if (d.params.mood)          document.getElementById('mood').value           = d.params.mood;
+      }
+      if (d.scenario)       document.getElementById('scenario').value       = d.scenario;
+      if (d.callerScript)   document.getElementById('caller-script').value   = d.callerScript;
+      if (d.haroldResponse) document.getElementById('harold-response').value = d.haroldResponse;
+      if (d.postText) {
+        document.getElementById('post-text').value = d.postText;
+        document.getElementById('btn-copy-post').style.display = 'inline-flex';
+        document.getElementById('btn-regen-post').style.display = 'inline-flex';
+        updatePostCharCount();
+      }
+      // Voice will get applied after voices have loaded
+      state._pendingVoiceId = d.voiceId || null;
+      state.callerScript    = d.callerScript || null;
+      state.haroldResponse  = d.haroldResponse || null;
+      state.postText        = d.postText || null;
+      state.useRecording    = !!d.useRecording;
+      if (state.callerScript || state.haroldResponse) {
+        document.getElementById('script-area').style.display = 'grid';
+      }
+      if (state.haroldResponse) dot('script', true);
+      if (state.postText)       dot('post', true);
+      updateGenerateButtons();
+      updateDraftIndicator(d.ts);
+    } catch (e) { /* corrupted draft — ignore */ }
+  }
+
+  function clearDraft() {
+    if (!confirm('Clear this draft? Text & selections will be wiped.')) return;
+    localStorage.removeItem(draftKey());
+    location.reload();
+  }
+
+  function updateDraftIndicator(ts) {
+    const el = document.getElementById('draft-indicator');
+    const txt = document.getElementById('draft-indicator-text');
+    if (!ts) { el.style.display = 'none'; return; }
+    el.style.display = 'inline-flex';
+    txt.textContent = `Draft saved ${formatRelativeTime(ts)}`;
+  }
+
+  function formatRelativeTime(ts) {
+    const sec = Math.round((Date.now() - ts) / 1000);
+    if (sec < 5)    return 'just now';
+    if (sec < 60)   return `${sec}s ago`;
+    if (sec < 3600) return `${Math.round(sec/60)}m ago`;
+    return `${Math.round(sec/3600)}h ago`;
+  }
+
+  // Refresh the relative timestamp every 30s
+  setInterval(() => {
+    const raw = localStorage.getItem(draftKey());
+    if (raw) { try { updateDraftIndicator(JSON.parse(raw).ts); } catch (_) {} }
+  }, 30000);
+
+  function attachDraftListeners() {
+    [
+      'call-type', 'caller-persona', 'mood', 'scenario',
+      'caller-script', 'harold-response', 'caller-voice-select', 'post-text',
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(evt, saveDraft);
+    });
+  }
+
+  // Apply a pending voice selection once voices have loaded
+  function applyPendingVoice() {
+    if (!state._pendingVoiceId) return;
+    const sel = document.getElementById('caller-voice-select');
+    if ([...sel.options].some(o => o.value === state._pendingVoiceId)) {
+      sel.value = state._pendingVoiceId;
+      sel.dispatchEvent(new Event('change'));
+    }
+    state._pendingVoiceId = null;
+  }
+
   // -- Init ----------------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('post-text').addEventListener('input', e => {
       state.postText = e.target.value;
       updatePostCharCount();
     });
+    attachDraftListeners();
   });
 
-  loadVoices();
-  loadCallContext();
+  // Initialization order: load voices, then load call context (which may set
+  // callContext changing the draftKey), then load any saved draft for the
+  // resolved key, then apply pending voice selection.
+  (async () => {
+    await loadVoices();
+    await loadCallContext();
+    loadDraft();
+    applyPendingVoice();
+  })();
 </script>
 </body>
 </html>
