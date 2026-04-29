@@ -132,6 +132,57 @@
     .summary-item .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
     .summary-item .dot.done { background: var(--green); }
 
+    .call-ref-card {
+      background: linear-gradient(135deg, rgba(245,158,11,.08), rgba(245,158,11,.02));
+      border: 1px solid var(--amber); border-radius: 12px; padding: 16px 20px;
+    }
+    .call-ref-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: .85rem; }
+    .call-ref-badge { background: var(--amber); color: #000; padding: 2px 10px; border-radius: 20px; font-weight: 700; font-size: .72rem; text-transform: uppercase; }
+    .call-ref-meta { color: var(--muted); }
+    .call-ref-clear {
+      margin-left: auto; background: transparent; color: var(--muted); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+    }
+    .call-ref-clear:hover { color: var(--text); border-color: var(--text); }
+    .call-ref-transcript { margin-top: 10px; font-style: italic; color: var(--text); font-size: .85rem; line-height: 1.45; }
+
+    .scenario-group { margin-top: 16px; }
+    .scenario-group label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
+    .scenario-group textarea { min-height: 60px; }
+
+    .gallery-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 8px; margin-top: 12px; padding: 10px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      max-height: 320px; overflow-y: auto;
+    }
+    .gallery-thumb {
+      cursor: pointer; border-radius: 6px; overflow: hidden;
+      border: 2px solid transparent; transition: border-color .1s;
+    }
+    .gallery-thumb:hover { border-color: var(--amber); }
+    .gallery-thumb.selected { border-color: var(--green); }
+    .gallery-thumb img { width: 100%; height: 110px; object-fit: cover; display: block; }
+    .gallery-section-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; grid-column: 1 / -1; padding: 4px 0 2px; }
+    .gallery-empty { grid-column: 1 / -1; color: var(--muted); font-size: .82rem; padding: 8px; text-align: center; }
+
+    .post-textarea { min-height: 130px; font-size: .9rem; }
+    .post-meta { display: flex; gap: 14px; font-size: .76rem; color: var(--muted); margin-top: 6px; }
+    .post-copy { background: transparent; color: var(--amber); border: 1px solid var(--amber); padding: 4px 10px; border-radius: 6px; font-size: .78rem; cursor: pointer; }
+
+    .real-rec-banner {
+      background: rgba(34,197,94,.1); border: 1px solid var(--green); border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 12px; font-size: .85rem;
+    }
+
+    .auto-btn {
+      background: linear-gradient(135deg, #f59e0b, #d97706); color: #000;
+      border: none; padding: 6px 14px; border-radius: 8px; font-size: .82rem;
+      font-weight: 700; cursor: pointer; margin-left: auto;
+    }
+    .auto-btn:disabled { opacity: .45; cursor: default; }
+    .auto-btn:hover:not(:disabled) { filter: brightness(1.1); }
+
     @media(max-width: 640px) {
       .params-grid { grid-template-columns: 1fr; }
       .script-grid { grid-template-columns: 1fr; }
@@ -145,12 +196,24 @@
   <div class="paw">🎬</div>
   <div>
     <h1>Harold's Production Studio</h1>
-    <p>Generate fully synthetic call videos for social media</p>
+    <p id="studio-subtitle">Generate fully synthetic call videos for social media</p>
   </div>
   <a class="nav-link" href="/dashboard">← Back to Dashboard</a>
 </header>
 
 <div class="studio-layout">
+
+  <!-- Call reference (visible only when ?callId=N) -->
+  <div class="call-ref-card" id="call-ref-card" style="display:none">
+    <div class="call-ref-row">
+      <span class="call-ref-badge" id="call-ref-type">CALL</span>
+      <span class="call-ref-meta" id="call-ref-date"></span>
+      <span class="call-ref-meta" id="call-ref-number"></span>
+      <span class="call-ref-meta" id="call-ref-recording"></span>
+      <button class="call-ref-clear" onclick="clearCallContext()">✕ Remove reference</button>
+    </div>
+    <p class="call-ref-transcript" id="call-ref-transcript"></p>
+  </div>
 
   <!-- Progress summary -->
   <div class="summary-bar" id="progress-bar">
@@ -159,6 +222,8 @@
     <div class="summary-item"><div class="dot" id="dot-harold-audio"></div>Harold Audio</div>
     <div class="summary-item"><div class="dot" id="dot-image"></div>Photo</div>
     <div class="summary-item"><div class="dot" id="dot-video"></div>Video</div>
+    <div class="summary-item"><div class="dot" id="dot-post"></div>Post</div>
+    <button class="auto-btn" id="btn-auto" onclick="autoGenerateAll()" title="Run all steps automatically">⚡ Auto-generate all</button>
   </div>
 
   <!-- Step 1: Parameters & Script -->
@@ -203,9 +268,14 @@
         </select>
       </div>
     </div>
+    <div class="scenario-group">
+      <label>Optional scenario or extra context <span style="color:var(--muted);font-weight:400">(weave a specific story detail into the script)</span></label>
+      <textarea id="scenario" rows="2" placeholder="e.g. 'caller's cat brought home a sock and acts proud of it' or paste your own seed idea…"></textarea>
+    </div>
     <div style="margin-top:18px">
       <div class="btn-row">
         <button class="action-btn" id="btn-generate-script" onclick="generateScript()">✨ Generate Script</button>
+        <button class="action-btn" id="btn-gen-harold-resp" style="display:none" onclick="generateHaroldResponse()">✨ Generate Harold's Response</button>
         <button class="action-btn secondary" id="btn-regen-script" style="display:none" onclick="generateScript()">↻ Regenerate</button>
       </div>
       <div class="script-grid" id="script-area" style="display:none">
@@ -228,6 +298,10 @@
       <div class="step-num" id="num-2">2</div>
       <h2>Caller Voice</h2>
       <span class="badge" id="badge-voices">Loading voices…</span>
+    </div>
+    <div class="real-rec-banner" id="real-rec-banner" style="display:none">
+      🎙 This call has a real recording. <button class="action-btn secondary" style="margin-left:8px;padding:.3rem .8rem;font-size:.8rem" onclick="useRealRecording()">Use real recording</button>
+      <span style="margin-left:6px;color:var(--muted)">— or pick an AI voice below.</span>
     </div>
     <div class="voice-row">
       <select id="caller-voice-select">
@@ -267,7 +341,10 @@
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-image" onclick="generateImage()" disabled>🖼 Generate Photo</button>
       <button class="action-btn secondary" id="btn-regen-image" style="display:none" onclick="generateImage()">↻ Regenerate</button>
+      <button class="action-btn secondary" id="btn-toggle-gallery" onclick="toggleGallery()">📚 Pick from Gallery</button>
+      <button class="action-btn secondary" id="btn-save-image" style="display:none" onclick="saveImageToGallery()">💾 Save to Gallery</button>
     </div>
+    <div class="gallery-grid" id="gallery-grid" style="display:none"></div>
     <div class="image-preview" id="image-preview"></div>
     <div class="status-line" id="status-image"></div>
   </div>
@@ -282,6 +359,25 @@
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
     </div>
     <div class="status-line" id="status-video"></div>
+  </div>
+
+  <!-- Step 6: Social Post Caption -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-6">6</div>
+      <h2>Social Post Caption</h2>
+      <span class="badge">optional</span>
+    </div>
+    <div class="btn-row">
+      <button class="action-btn" id="btn-gen-post" onclick="generatePost()" disabled>✍️ Generate Caption</button>
+      <button class="action-btn secondary" id="btn-regen-post" style="display:none" onclick="generatePost()">↻ Regenerate</button>
+      <button class="post-copy" id="btn-copy-post" style="display:none" onclick="copyPost()">📋 Copy</button>
+    </div>
+    <textarea id="post-text" class="post-textarea" placeholder="Generate a caption based on the script — fully editable…"></textarea>
+    <div class="post-meta">
+      <span id="post-char-count">0 chars</span>
+    </div>
+    <div class="status-line" id="status-post"></div>
   </div>
 
 </div>
@@ -315,7 +411,12 @@
     callerAudioData: null,
     haroldAudioData: null,
     imageData:       null,
+    useRecording:    false,        // when true and callContext is set, use Twilio recording
+    callContext:     null,         // { id, caller_number, call_type, transcript, harold_response, hasRecording, ... }
+    postText:        null,
   };
+
+  function isSyntheticMode() { return !state.callContext; }
 
   function dot(id, done) {
     document.getElementById(`dot-${id}`).classList.toggle('done', done);
@@ -353,6 +454,7 @@
       callType:      document.getElementById('call-type').value,
       callerPersona: document.getElementById('caller-persona').value,
       mood:          document.getElementById('mood').value,
+      scenario:      document.getElementById('scenario').value.trim(),
     };
 
     const res = await adminFetch('/studio/api/generate-script', {
@@ -405,12 +507,18 @@
     document.getElementById('btn-gen-caller').disabled  = !(hasScript && hasVoice);
     document.getElementById('btn-gen-harold').disabled  = !hasHarold;
     document.getElementById('btn-gen-image').disabled   = !hasHarold;
+    document.getElementById('btn-gen-post').disabled    = !hasHarold;
+    document.getElementById('btn-gen-harold-resp').disabled = !hasScript;
     checkVideoReady();
   }
 
   function checkVideoReady() {
-    const ready = !!(state.callerAudioData && state.haroldAudioData && state.imageData);
-    document.getElementById('btn-gen-video').disabled = !ready;
+    // Caller audio is required when caller is voiced (AI) OR when using real recording.
+    // For studio synthetic-only with no caller, allow Harold-only video.
+    const haveCallerAudio = !!state.callerAudioData || (state.useRecording && state.callContext?.id);
+    const ready = !!(state.haroldAudioData && state.imageData) && (isSyntheticMode() ? haveCallerAudio : (haveCallerAudio || true));
+    // For real-call mode, caller audio is still required (per UX); allow Harold-only only if user explicitly skips.
+    document.getElementById('btn-gen-video').disabled = !(state.haroldAudioData && state.imageData && haveCallerAudio);
   }
 
   // -- Step 2: Caller audio ------------------------------------------------------
@@ -517,10 +625,12 @@
     const { image, scene } = await res.json();
     state.imageData = image;
     state.scene     = scene;
+    state.imageFromGallery = false;
 
     document.getElementById('image-preview').innerHTML =
       `<img src="${image}" alt="Harold photo" /><div class="scene-label">${escapeHtml(scene)}</div>`;
     document.getElementById('btn-regen-image').style.display = 'inline-flex';
+    document.getElementById('btn-save-image').style.display = 'inline-flex';
     dot('image', true);
     checkVideoReady();
     status.textContent = '✓ Photo generated'; status.className = 'status-line ok';
@@ -528,23 +638,31 @@
 
   // -- Step 5: Video -------------------------------------------------------------
   async function generateVideo() {
-    if (!state.callerAudioData || !state.haroldAudioData || !state.imageData) return;
+    if (!state.haroldAudioData || !state.imageData) return;
 
     const btn    = document.getElementById('btn-gen-video');
     const status = document.getElementById('status-video');
     btn.disabled = true; btn.textContent = '🎬 Generating…';
     status.textContent = 'Assembling video — this takes about 20 seconds…'; status.className = 'status-line';
 
+    const body = {
+      imageData:       state.imageData,
+      haroldAudioData: state.haroldAudioData,
+      haroldText:      document.getElementById('harold-response').value.trim(),
+    };
+    if (state.useRecording && state.callContext?.id) {
+      body.useRecording = true;
+      body.callId       = state.callContext.id;
+      body.callerText   = document.getElementById('caller-script').value.trim();
+    } else if (state.callerAudioData) {
+      body.callerAudioData = state.callerAudioData;
+      body.callerText      = document.getElementById('caller-script').value.trim();
+    }
+
     const res = await adminFetch('/studio/api/generate-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        imageData:       state.imageData,
-        callerAudioData: state.callerAudioData,
-        haroldAudioData: state.haroldAudioData,
-        callerText:      document.getElementById('caller-script').value.trim(),
-        haroldText:      document.getElementById('harold-response').value.trim(),
-      }),
+      body: JSON.stringify(body),
     });
     btn.disabled = false; btn.textContent = '🎬 Generate & Download';
 
@@ -565,10 +683,274 @@
   }
 
   function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  // -- Use real recording (real-call mode) ---------------------------------------
+  function useRealRecording() {
+    if (!state.callContext) return;
+    state.useRecording    = true;
+    state.callerAudioData = null;
+    document.getElementById('caller-audio-wrap').style.display = 'none';
+    document.getElementById('status-caller-audio').textContent = '✓ Will use real Twilio recording in final video';
+    document.getElementById('status-caller-audio').className   = 'status-line ok';
+    dot('caller-audio', true);
+    checkVideoReady();
+  }
+
+  // -- Generate Harold's response from a real call's transcript ------------------
+  async function generateHaroldResponse() {
+    const transcript = document.getElementById('caller-script').value.trim();
+    if (!transcript) { alert('Caller script is empty.'); return; }
+    const btn    = document.getElementById('btn-gen-harold-resp');
+    const status = document.getElementById('status-script');
+    btn.disabled = true; btn.textContent = '✨ Generating…';
+    status.textContent = ''; status.className = 'status-line';
+
+    const res = await adminFetch('/studio/api/generate-response', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript,
+        callType: state.callContext?.call_type,
+        callId:   state.callContext?.id,
+      }),
+    });
+    btn.disabled = false; btn.textContent = "✨ Generate Harold's Response";
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed to generate response.'; status.className = 'status-line err';
+      return;
+    }
+    const { response } = await res.json();
+    state.haroldResponse = response;
+    document.getElementById('harold-response').value = response;
+    dot('script', true);
+    updateGenerateButtons();
+    status.textContent = "✓ Harold's response generated"; status.className = 'status-line ok';
+  }
+
+  // -- Step 4 helpers: gallery & save --------------------------------------------
+  let galleryLoaded = false;
+  async function toggleGallery() {
+    const grid = document.getElementById('gallery-grid');
+    const open = grid.style.display === 'none';
+    if (open && !galleryLoaded) await loadGallery();
+    grid.style.display = open ? 'grid' : 'none';
+    document.getElementById('btn-toggle-gallery').textContent = open ? '✕ Close Gallery' : '📚 Pick from Gallery';
+  }
+
+  async function loadGallery() {
+    const grid = document.getElementById('gallery-grid');
+    grid.innerHTML = '<div class="gallery-empty">Loading…</div>';
+    const res = await adminFetch('/studio/api/gallery');
+    if (!res || !res.ok) { grid.innerHTML = '<div class="gallery-empty">Could not load gallery.</div>'; return; }
+    const { refs, generated } = await res.json();
+    let html = '';
+    if (generated.length) {
+      html += '<div class="gallery-section-label">Previously Generated</div>';
+      generated.forEach(g => { html += `<div class="gallery-thumb" onclick="pickGalleryImage('${g.url}', this)"><img src="${g.url}" alt=""></div>`; });
+    }
+    if (refs.length) {
+      html += '<div class="gallery-section-label">Reference Photos</div>';
+      refs.forEach(r => { html += `<div class="gallery-thumb" onclick="pickGalleryImage('${r.url}', this)"><img src="${r.url}" alt=""></div>`; });
+    }
+    if (!html) html = '<div class="gallery-empty">No saved images yet.</div>';
+    grid.innerHTML = html;
+    galleryLoaded = true;
+  }
+
+  async function pickGalleryImage(url, el) {
+    document.querySelectorAll('.gallery-thumb').forEach(t => t.classList.remove('selected'));
+    el.classList.add('selected');
+    // Convert URL to base64 data URL so it can be sent to generate-video
+    const r = await fetch(url);
+    const blob = await r.blob();
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.imageData       = reader.result;
+      state.imageFromGallery = true;
+      state.scene           = '';
+      document.getElementById('image-preview').innerHTML =
+        `<img src="${reader.result}" alt="Selected from gallery" /><div class="scene-label">From gallery</div>`;
+      document.getElementById('btn-save-image').style.display = 'none';
+      document.getElementById('status-image').textContent = '✓ Photo selected from gallery'; document.getElementById('status-image').className = 'status-line ok';
+      dot('image', true);
+      checkVideoReady();
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  async function saveImageToGallery() {
+    if (!state.imageData || state.imageFromGallery) return;
+    const btn = document.getElementById('btn-save-image');
+    btn.disabled = true; btn.textContent = '💾 Saving…';
+    const res = await adminFetch('/studio/api/save-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: state.imageData }),
+    });
+    btn.disabled = false;
+    if (!res || !res.ok) { btn.textContent = '💾 Save failed'; return; }
+    btn.textContent = '✓ Saved!';
+    galleryLoaded = false; // refresh next open
+    setTimeout(() => { btn.textContent = '💾 Save to Gallery'; }, 2000);
+  }
+
+  // -- Step 6: Social post caption -----------------------------------------------
+  async function generatePost() {
+    const haroldResponse = document.getElementById('harold-response').value.trim();
+    if (!haroldResponse) return;
+    const callerScript = document.getElementById('caller-script').value.trim();
+    const btn    = document.getElementById('btn-gen-post');
+    const status = document.getElementById('status-post');
+    btn.disabled = true; btn.textContent = '✍️ Generating…';
+    status.textContent = ''; status.className = 'status-line';
+
+    const callType = state.callContext?.call_type || document.getElementById('call-type').value;
+
+    const res = await adminFetch('/studio/api/generate-post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        callerScript, haroldResponse, callType,
+        isSynthetic: isSyntheticMode(),
+      }),
+    });
+    btn.disabled = false; btn.textContent = '✍️ Generate Caption';
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed to generate caption.'; status.className = 'status-line err';
+      return;
+    }
+    const { post } = await res.json();
+    state.postText = post;
+    const ta = document.getElementById('post-text');
+    ta.value = post;
+    updatePostCharCount();
+    document.getElementById('btn-regen-post').style.display = 'inline-flex';
+    document.getElementById('btn-copy-post').style.display = 'inline-flex';
+    dot('post', true);
+    status.textContent = '✓ Caption ready — edit freely.'; status.className = 'status-line ok';
+  }
+
+  function updatePostCharCount() {
+    const ta = document.getElementById('post-text');
+    document.getElementById('post-char-count').textContent = `${ta.value.length} chars`;
+  }
+
+  async function copyPost() {
+    const text = document.getElementById('post-text').value;
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('btn-copy-post');
+      btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+    } catch (_) { alert('Could not copy to clipboard.'); }
+  }
+
+  // -- Auto-generate all steps ---------------------------------------------------
+  async function autoGenerateAll() {
+    const btn = document.getElementById('btn-auto');
+    btn.disabled = true; btn.textContent = '⚡ Running…';
+    try {
+      // 1. Script (only if we don't already have one)
+      if (!state.haroldResponse?.trim()) {
+        if (isSyntheticMode()) {
+          await generateScript();
+        } else {
+          await generateHaroldResponse();
+        }
+      }
+      // 2. Caller audio — only if synthetic, OR if real call without explicit "use recording"
+      if (!state.callerAudioData && !state.useRecording) {
+        if (document.getElementById('caller-voice-select').value) {
+          await generateCallerAudio();
+        }
+      }
+      // 3. Harold audio
+      if (!state.haroldAudioData) await generateHaroldAudio();
+      // 4. Image (skip if already chosen from gallery)
+      if (!state.imageData) await generateImage();
+      // 5. Caption
+      if (!state.postText) await generatePost();
+      btn.textContent = '✓ Done — review & download';
+    } catch (e) {
+      btn.textContent = '⚡ Auto-generate all';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = '⚡ Auto-generate all'; }, 3000);
+    }
+  }
+
+  // -- Real-call mode: load context from ?callId=N --------------------------------
+  async function loadCallContext() {
+    const params = new URLSearchParams(location.search);
+    const callId = params.get('callId');
+    if (!callId) return;
+    const res = await adminFetch(`/studio/api/call/${encodeURIComponent(callId)}`);
+    if (!res || !res.ok) return;
+    const { call } = await res.json();
+    state.callContext = call;
+
+    // Show call-reference card
+    const card = document.getElementById('call-ref-card');
+    document.getElementById('call-ref-type').textContent = (call.call_type || 'call').toUpperCase();
+    const dt = call.created_at ? new Date(call.created_at) : null;
+    document.getElementById('call-ref-date').textContent = dt ? dt.toLocaleString() : '';
+    document.getElementById('call-ref-number').textContent = maskPhone(call.caller_number);
+    document.getElementById('call-ref-recording').textContent = call.hasRecording ? '🎙 Has recording' : '';
+    const transcript = call.transcript || call.wisdom_text || '';
+    document.getElementById('call-ref-transcript').textContent = transcript ? `"${transcript}"` : '(no transcript)';
+    card.style.display = 'block';
+
+    document.getElementById('studio-subtitle').textContent = `Building a video for call #${call.id}`;
+
+    // Pre-fill caller script & Harold response
+    if (transcript) {
+      document.getElementById('caller-script').value = transcript;
+      state.callerScript = transcript;
+      document.getElementById('script-area').style.display = 'grid';
+    }
+    if (call.harold_response) {
+      document.getElementById('harold-response').value = call.harold_response;
+      state.haroldResponse = call.harold_response;
+      document.getElementById('script-area').style.display = 'grid';
+      dot('script', true);
+    }
+
+    // Swap script-area buttons: hide synthetic "Generate Script", show "Generate Harold's Response"
+    document.getElementById('btn-generate-script').style.display = 'none';
+    document.getElementById('btn-gen-harold-resp').style.display = 'inline-flex';
+
+    // Show real-recording option if available
+    if (call.hasRecording) {
+      document.getElementById('real-rec-banner').style.display = 'block';
+    }
+
+    updateGenerateButtons();
+  }
+
+  function clearCallContext() {
+    location.href = '/studio';
+  }
+
+  function maskPhone(num) {
+    if (!num) return '';
+    const digits = num.replace(/\D/g, '');
+    if (digits.length >= 10) return `+• (•••) •••-${digits.slice(-4)}`;
+    return num;
+  }
+
+  // -- Init ----------------------------------------------------------------------
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('post-text').addEventListener('input', e => {
+      state.postText = e.target.value;
+      updatePostCharCount();
+    });
+  });
+
   loadVoices();
+  loadCallContext();
 </script>
 </body>
 </html>

@@ -418,72 +418,6 @@
       text-transform: uppercase;
     }
 
-    /* -- Social content pipeline ------------------------------------------ */
-    .social-section {
-      margin-top: 1rem;
-      padding-top: .75rem;
-      border-top: 1px solid var(--border);
-    }
-    .social-steps {
-      display: flex;
-      flex-direction: column;
-      gap: .75rem;
-    }
-    .social-step {
-      background: #fafafa;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: .75rem 1rem;
-    }
-    .social-step-header {
-      display: flex;
-      align-items: center;
-      gap: .6rem;
-      margin-bottom: .5rem;
-    }
-    .step-num {
-      background: var(--amber);
-      color: #fff;
-      font-size: .7rem;
-      font-weight: 800;
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .social-step h4 { font-size: .85rem; font-weight: 700; margin: 0; }
-    .social-btn {
-      background: var(--amber); border: none; border-radius: 8px;
-      padding: .35rem .8rem; font-size: .82rem; font-weight: 600;
-      color: #fff; cursor: pointer; transition: background .15s;
-    }
-    .social-btn:hover:not(:disabled) { background: var(--amber-dk); }
-    .social-btn:disabled { opacity: .45; cursor: default; }
-    .social-btn.secondary {
-      background: var(--surface); color: var(--text);
-      border: 1.5px solid var(--border);
-    }
-    .social-btn.secondary:hover:not(:disabled) { background: var(--amber-lt); border-color: var(--amber); }
-
-    .response-textarea {
-      width: 100%; min-height: 70px;
-      padding: .5rem .7rem;
-      border: 1.5px solid var(--border); border-radius: 8px;
-      font-family: inherit; font-size: .88rem; line-height: 1.5;
-      resize: vertical; margin-top: .4rem;
-    }
-    .response-textarea:focus { outline: none; border-color: var(--amber); }
-    .social-image-preview {
-      margin-top: .5rem;
-      max-width: 220px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.12);
-    }
-    .social-scene-label {
-      font-size: .72rem; color: var(--muted); font-style: italic; margin-top: .3rem;
-    }
-    .btn-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
-
     /* -- Status banner (unavailable mode) ---------------------------------- */
     .status-banner {
       background: var(--red);
@@ -576,7 +510,7 @@
     <h1>Harold's Free Hotline</h1>
     <p>Call center dashboard — all confessions &amp; conversations logged here</p>
   </div>
-  <a href="/studio" style="margin-left:auto;font-size:.82rem;color:var(--amber);text-decoration:none" onmouseover="this.style.color='var(--amber-lt)'" onmouseout="this.style.color='var(--amber)'">🎬 Production Studio</a>
+  <a href="/studio" style="margin-left:auto;font-size:.85rem;color:#fff;text-decoration:none;background:rgba(0,0,0,.22);padding:8px 14px;border-radius:8px;font-weight:600" onmouseover="this.style.background='rgba(0,0,0,.35)'" onmouseout="this.style.background='rgba(0,0,0,.22)'">🎬 Production Studio</a>
 </header>
 
 <div id="unavailable-banner" class="status-banner" style="display:none">
@@ -912,10 +846,6 @@
     const { calls, total } = await res.json();
     totalCalls = total;
 
-    // Index calls by id so caller audio functions can look up transcripts
-    window._callsById = window._callsById || {};
-    calls.forEach(c => { window._callsById[c.id] = c; });
-
     document.getElementById('btn-prev').disabled = offset === 0;
     document.getElementById('btn-next').disabled = offset + PAGE_SIZE >= total;
 
@@ -976,71 +906,14 @@
             </button>
             ${call.recording_sid ? `<button class="admin-btn danger" onclick="event.stopPropagation();adminDeleteRecording(${call.id})">🗑 Delete recording</button>` : ''}
             ${call.transcript ? `<button class="admin-btn" onclick="event.stopPropagation();generatePost(${call.id})">✨ Generate post</button>` : ''}
-            ${(call.transcript || call.wisdom_text) ? `<button class="admin-btn" onclick="event.stopPropagation();toggleSocial(${call.id})">📱 Social video</button>` : ''}
+            ${(call.transcript || call.wisdom_text) ? `<a class="admin-btn" href="/studio?callId=${call.id}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="text-decoration:none;display:inline-block">🎬 Open in Studio ↗</a>` : ''}
           </div>
           <div id="post-${call.id}" style="display:none"></div>
-          <div id="social-${call.id}" style="display:none">
-            <div class="social-section">
-              <div class="social-steps">
-                <div class="social-step">
-                  <div class="social-step-header">
-                    <span class="step-num">1</span>
-                    <h4>Harold's Response</h4>
-                  </div>
-                  <div class="btn-row">
-                    <button class="social-btn" onclick="event.stopPropagation();generateSocialResponse(${call.id})">Generate</button>
-                    <button class="social-btn secondary" id="regen-resp-${call.id}" onclick="event.stopPropagation();generateSocialResponse(${call.id})" style="display:none">↻ Regenerate</button>
-                  </div>
-                  <textarea class="response-textarea" id="resp-text-${call.id}" placeholder="Harold's response will appear here — edit freely after generating…" oninput="socialState[${call.id}] = socialState[${call.id}] || {}; socialState[${call.id}].response = this.value">${call.harold_response ? escapeHtml(call.harold_response) : ''}</textarea>
-                </div>
-                <div class="social-step">
-                  <div class="social-step-header">
-                    <span class="step-num">2</span>
-                    <h4>Caller Audio <span style="font-weight:400;color:var(--muted);font-size:.8rem">optional</span></h4>
-                  </div>
-                  <div class="btn-row">
-                    <button class="social-btn secondary" id="caller-toggle-${call.id}" onclick="event.stopPropagation();toggleCallerAudio(${call.id})">+ Add caller audio</button>
-                  </div>
-                  <div id="caller-opts-${call.id}" style="display:none;margin-top:.5rem">
-                    ${call.recording_url ? `<div class="btn-row"><button class="social-btn secondary" onclick="event.stopPropagation();useRealRecording(${call.id})">🎙 Use real recording</button></div>` : ''}
-                    <div style="font-size:.78rem;color:var(--muted);margin:.4rem 0 .3rem">— or generate AI voice —</div>
-                    <div class="btn-row">
-                      <select id="caller-voice-${call.id}" style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.38rem .5rem;font-size:.82rem"><option value="">Loading voices…</option></select>
-                      <button class="social-btn" onclick="event.stopPropagation();generateSocialCallerAudio(${call.id})">Generate</button>
-                    </div>
-                    <div id="caller-audio-preview-${call.id}" style="margin-top:.4rem"></div>
-                    <div id="caller-audio-status-${call.id}" style="font-size:.78rem;color:var(--muted);margin-top:.3rem"></div>
-                  </div>
-                </div>
-                <div class="social-step">
-                  <div class="social-step-header">
-                    <span class="step-num">3</span>
-                    <h4>Harold's Photo</h4>
-                  </div>
-                  <div class="btn-row">
-                    <button class="social-btn" id="gen-img-btn-${call.id}" onclick="event.stopPropagation();generateSocialImage(${call.id})">Generate image</button>
-                    <button class="social-btn secondary" id="regen-img-${call.id}" onclick="event.stopPropagation();generateSocialImage(${call.id})" style="display:none">↻ Regenerate</button>
-                  </div>
-                  <div id="img-preview-${call.id}"></div>
-                </div>
-                <div class="social-step">
-                  <div class="social-step-header">
-                    <span class="step-num">4</span>
-                    <h4>Generate Video</h4>
-                  </div>
-                  <div class="btn-row">
-                    <button class="social-btn" id="vid-btn-${call.id}" onclick="event.stopPropagation();generateSocialVideo(${call.id})">🎬 Generate &amp; download</button>
-                  </div>
-                  <div id="vid-status-${call.id}" style="font-size:.8rem;color:var(--muted);margin-top:.4rem"></div>
-                </div>
-              </div>
-            </div>
-          </div>
         </td>
       </tr>
     `).join('');
 
-    // Restore expanded rows, generated posts, and social panels
+    // Restore expanded rows and generated posts
     expandedIds.forEach(id => {
       const detail = document.getElementById(`detail-${id}`);
       const row    = document.getElementById(`row-${id}`);
@@ -1048,33 +921,6 @@
       if (savedPosts[id]) {
         const postEl = document.getElementById(`post-${id}`);
         if (postEl) { postEl.innerHTML = savedPosts[id]; postEl.style.display = 'block'; }
-      }
-      // Restore social panel state
-      if (socialState[id]) {
-        const s = socialState[id];
-        const panel = document.getElementById(`social-${id}`);
-        if (panel && panel.style.display !== 'none') {
-          if (s.response) {
-            const ta = document.getElementById(`resp-text-${id}`);
-            if (ta) ta.value = s.response;
-            const regenBtn = document.getElementById(`regen-resp-${id}`);
-            if (regenBtn) regenBtn.style.display = 'inline-block';
-          }
-          if (s.imageData) {
-            const preview = document.getElementById(`img-preview-${id}`);
-            if (preview) preview.innerHTML = `<img src="${s.imageData}" class="social-image-preview" /><div class="social-scene-label">${escapeHtml(s.scene || '')}</div>`;
-            const regenImg = document.getElementById(`regen-img-${id}`);
-            if (regenImg) regenImg.style.display = 'inline-block';
-          }
-          if (s.callerAudioData || s.useRecording) {
-            const opts = document.getElementById(`caller-opts-${id}`);
-            const toggleBtn = document.getElementById(`caller-toggle-${id}`);
-            if (opts) { opts.style.display = 'block'; ensureVoicesLoaded(document.getElementById(`caller-voice-${id}`)); }
-            if (toggleBtn) toggleBtn.textContent = '− Remove caller audio';
-            const statusEl = document.getElementById(`caller-audio-status-${id}`);
-            if (statusEl) statusEl.textContent = s.useRecording ? '✓ Will use real recording' : '✓ Caller audio ready';
-          }
-        }
       }
     });
   }
@@ -1196,153 +1042,6 @@
     } else if (res) {
       alert('Failed to delete recording.');
     }
-  }
-
-  // -- Social content pipeline -----------------------------------------------
-  const socialState = {}; // { [id]: { response, imageData, scene, callerAudioData, callerText, useRecording } }
-
-  // Lazily loaded voices list for caller audio pickers
-  let cachedVoices = null;
-  async function ensureVoicesLoaded(selectEl) {
-    if (!selectEl || selectEl.dataset.loaded) return;
-    if (!cachedVoices) {
-      selectEl.innerHTML = '<option value="">Loading…</option>';
-      const res = await adminFetch('/dashboard/api/voices');
-      if (!res || !res.ok) { selectEl.innerHTML = '<option value="">Could not load voices</option>'; return; }
-      const { voices } = await res.json();
-      cachedVoices = voices;
-    }
-    selectEl.innerHTML = '<option value="">— pick a voice —</option>' +
-      cachedVoices.map(v => {
-        const desc = [v.labels.gender, v.labels.age, v.labels.accent].filter(Boolean).join(', ');
-        return `<option value="${v.id}">${v.name}${desc ? ` (${desc})` : ''}</option>`;
-      }).join('');
-    selectEl.dataset.loaded = '1';
-  }
-
-  function toggleSocial(id) {
-    const el = document.getElementById(`social-${id}`);
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-    const ta = document.getElementById(`resp-text-${id}`);
-    if (ta && ta.value) document.getElementById(`regen-resp-${id}`).style.display = 'inline-block';
-  }
-
-  async function generateSocialResponse(id) {
-    const btn  = document.querySelector(`#social-${id} .social-btn`);
-    btn.disabled = true; btn.textContent = 'Generating…';
-    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-response`, { method: 'POST' });
-    btn.disabled = false; btn.textContent = 'Generate';
-    if (!res || !res.ok) { const e = await res?.json().catch(()=>{}); alert(e?.error || 'Failed.'); return; }
-    const { response } = await res.json();
-    socialState[id] = { ...(socialState[id] || {}), response };
-    document.getElementById(`resp-text-${id}`).value = response;
-    document.getElementById(`regen-resp-${id}`).style.display = 'inline-block';
-  }
-
-  function toggleCallerAudio(id) {
-    const opts = document.getElementById(`caller-opts-${id}`);
-    const btn  = document.getElementById(`caller-toggle-${id}`);
-    const open = opts.style.display === 'none';
-    opts.style.display = open ? 'block' : 'none';
-    btn.textContent = open ? '− Remove caller audio' : '+ Add caller audio';
-    if (open) {
-      ensureVoicesLoaded(document.getElementById(`caller-voice-${id}`));
-    } else {
-      // Clear caller audio state when toggled off
-      if (socialState[id]) { socialState[id].callerAudioData = null; socialState[id].useRecording = false; }
-    }
-  }
-
-  function useRealRecording(id) {
-    socialState[id] = { ...(socialState[id] || {}), useRecording: true, callerAudioData: null };
-    const status = document.getElementById(`caller-audio-status-${id}`);
-    if (status) status.textContent = '✓ Will use real recording';
-    const preview = document.getElementById(`caller-audio-preview-${id}`);
-    if (preview) preview.innerHTML = '';
-  }
-
-  async function generateSocialCallerAudio(id) {
-    const voiceSel = document.getElementById(`caller-voice-${id}`);
-    const voiceId  = voiceSel?.value;
-    const call     = window._callsById?.[id];
-    const text     = call?.transcript || call?.wisdom_text || '';
-    if (!voiceId) { alert('Pick a voice first.'); return; }
-    if (!text)    { alert('This call has no transcript to voice.'); return; }
-
-    const status  = document.getElementById(`caller-audio-status-${id}`);
-    const preview = document.getElementById(`caller-audio-preview-${id}`);
-    status.textContent = 'Generating caller audio…';
-
-    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-caller-audio`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voiceId, text }),
-    });
-    if (!res || !res.ok) {
-      const e = await res?.json().catch(()=>{});
-      status.textContent = e?.error || 'Failed.'; return;
-    }
-    const buffer = await res.arrayBuffer();
-    const blob   = new Blob([buffer], { type: 'audio/mpeg' });
-    const url    = URL.createObjectURL(blob);
-    const reader = new FileReader();
-    reader.onload = () => {
-      socialState[id] = { ...(socialState[id] || {}), callerAudioData: reader.result, callerText: text, useRecording: false };
-    };
-    reader.readAsDataURL(blob);
-    preview.innerHTML = `<audio controls src="${url}" style="width:100%;height:36px;margin-top:4px"></audio>`;
-    status.textContent = '✓ Caller audio ready';
-  }
-
-  async function generateSocialImage(id) {
-    const genBtn = document.getElementById(`gen-img-btn-${id}`);
-    const regenBtn = document.getElementById(`regen-img-${id}`);
-    genBtn.disabled = true; genBtn.textContent = 'Generating…';
-    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-image`, { method: 'POST' });
-    genBtn.disabled = false; genBtn.textContent = 'Generate image';
-    if (!res || !res.ok) { const e = await res?.json().catch(()=>{}); alert(e?.error || 'Failed.'); return; }
-    const { image, scene } = await res.json();
-    socialState[id] = { ...(socialState[id] || {}), imageData: image, scene };
-    const preview = document.getElementById(`img-preview-${id}`);
-    preview.innerHTML = `<img src="${image}" class="social-image-preview" /><div class="social-scene-label">${escapeHtml(scene)}</div>`;
-    regenBtn.style.display = 'inline-block';
-  }
-
-  async function generateSocialVideo(id) {
-    const s            = socialState[id] || {};
-    const responseText = document.getElementById(`resp-text-${id}`)?.value?.trim() || s.response;
-    const imageData    = s.imageData;
-    if (!responseText) { alert('Generate a response first (Step 1).'); return; }
-    if (!imageData)    { alert('Generate an image first (Step 3).'); return; }
-
-    const body = { imageData, responseText };
-    if (s.callerAudioData) { body.callerAudioData = s.callerAudioData; body.callerText = s.callerText || ''; }
-    else if (s.useRecording) { body.useRecording = true; }
-
-    const btn    = document.getElementById(`vid-btn-${id}`);
-    const status = document.getElementById(`vid-status-${id}`);
-    btn.disabled = true; btn.textContent = '🎬 Generating…';
-    status.textContent = 'Harold is being filmed… this takes about 15–25 seconds.';
-
-    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-video`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    btn.disabled = false; btn.textContent = '🎬 Generate & download';
-
-    if (!res || !res.ok) {
-      const e = await res?.json().catch(()=>{});
-      status.textContent = ''; alert(e?.error || 'Failed to generate video.');
-      return;
-    }
-
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `harold-${id}.mp4`; a.click();
-    URL.revokeObjectURL(url);
-    status.textContent = '✓ Downloaded!';
   }
 
   // -- Call volume chart -----------------------------------------------------
