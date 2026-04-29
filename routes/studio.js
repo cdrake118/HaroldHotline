@@ -50,6 +50,32 @@ function wrapText(text, maxChars = 36) {
   return lines;
 }
 
+// Splits text into 4-word phrases and builds timed drawtext filters for each phrase.
+// startSec / endSec define the speaker's window in the final audio timeline.
+function buildTimedCaptions(text, startSec, endSec, fontSize = 40) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length || endSec <= startSec) return [];
+  const CHUNK = 4;
+  const chunks = [];
+  for (let i = 0; i < words.length; i += CHUNK) chunks.push(words.slice(i, i + CHUNK).join(' '));
+  const chunkDur = (endSec - startSec) / chunks.length;
+  const lineH = Math.round(fontSize * 1.3);
+  const filters = [];
+  chunks.forEach((chunk, idx) => {
+    const t0 = +(startSec + idx * chunkDur).toFixed(3);
+    const t1 = +(startSec + (idx + 1) * chunkDur).toFixed(3);
+    const lines = wrapText(chunk, 32);
+    const blockH = lines.length * lineH + 24;
+    lines.forEach((line, li) => {
+      const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '\u2019').replace(/:/g, '\\:');
+      filters.push(
+        `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${blockH - li * lineH}:fontsize=${fontSize}:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,${t0},${t1})'`
+      );
+    });
+  });
+  return filters;
+}
+
 // Runs ffmpeg with real-time progress reporting via -progress pipe:1.
 // onPct(0..1) is called each time ffmpeg reports a new out_time_ms value.
 // out_time_ms is in microseconds despite the name; totalSecs is in seconds.
@@ -263,9 +289,11 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
     `Return ONLY valid JSON (no markdown, no explanation):\n` +
     `{\n` +
     `  "callerScript": "What the caller says. Sound like a real voicemail — a little nervous, specific, conversational. 2-4 sentences. Natural filler words where appropriate. For confessions: specific and cringeworthy, not vague.",\n` +
-    `  "haroldResponse": "1-2 sentences. Harold speaks his own mind — direct, dry, a little cutting. Always third person: 'Harold thinks...', 'Harold has seen worse.', 'Harold is unmoved.' Under 35 words. No moralizing. No comforting. He is a cat.",\n` +
+    `  "haroldVariations": ["first response", "second response", "third response"],\n` +
     `  "scene": "1-2 sentence description for a realistic photo of a tabby cat matching the mood — natural setting, no props, no text."\n` +
-    `}`;
+    `}\n\n` +
+    `Rules for haroldVariations: EXACTLY 3 items. Each: 1-2 sentences, under 35 words, always third person ("Harold...", never "I"). ` +
+    `Vary tone across the three — e.g. cutting/judgmental, absurdly matter-of-fact, and unexpectedly profound.`;
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -388,7 +416,8 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     if (typeof res.flush === 'function') res.flush();
   }
 
-  const { imageData, callerAudioData, haroldAudioData, callerText, haroldText, useRecording, callId } = req.body;
+  const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
+          useRecording, callId, aspectRatio = '1:1', includeRing = false } = req.body;
 
   if (!imageData || !haroldAudioData || !haroldText) {
     emit({ error: 'imageData, haroldAudioData, and haroldText are required' });
@@ -406,6 +435,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
   const tmpHarold   = path.join(os.tmpdir(), `studio-harold-${uid}.mp3`);
   const tmpCombined = path.join(os.tmpdir(), `studio-combined-${uid}.mp3`);
   const tmpVid      = path.join(os.tmpdir(), `studio-vid-${uid}.mp4`);
+  const ringAudioPath = path.join(__dirname, '..', 'public', 'audio', 'ring.mp3');
 
   try {
     emit({ pct: 5, msg: 'Preparing files…' });
@@ -427,17 +457,42 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       }
     }
 
-    let audioFile = tmpHarold;
+    // Measure caller duration before any concat
     let callerDur = 0;
     if (hasCallerAudio) {
-      emit({ pct: 15, msg: 'Measuring audio…' });
-      const { stdout } = await execFileAsync('ffprobe', [
-        '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller,
-      ]);
+      emit({ pct: 14, msg: 'Measuring audio…' });
+      const { stdout } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller]);
       callerDur = parseFloat(stdout.trim()) || 0;
-      emit({ pct: 18, msg: 'Combining audio…' });
+    }
+
+    // Measure ring duration if requested and file exists
+    const hasRing = includeRing && fs.existsSync(ringAudioPath);
+    let ringDur = 0;
+    if (hasRing) {
+      const { stdout: rOut } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', ringAudioPath]);
+      ringDur = parseFloat(rOut.trim()) || 0;
+    }
+
+    // Build combined audio track
+    emit({ pct: 18, msg: 'Combining audio…' });
+    let audioFile = tmpHarold;
+    if (hasCallerAudio && hasRing) {
+      await execFileAsync('ffmpeg', [
+        '-i', ringAudioPath, '-i', tmpCaller, '-i', tmpHarold,
+        '-filter_complex', '[0:a][1:a][2:a]concat=n=3:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpCombined,
+      ]);
+      audioFile = tmpCombined;
+    } else if (hasCallerAudio) {
       await execFileAsync('ffmpeg', [
         '-i', tmpCaller, '-i', tmpHarold,
+        '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpCombined,
+      ]);
+      audioFile = tmpCombined;
+    } else if (hasRing) {
+      await execFileAsync('ffmpeg', [
+        '-i', ringAudioPath, '-i', tmpHarold,
         '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
         '-map', '[outa]', '-y', tmpCombined,
       ]);
@@ -445,38 +500,27 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     }
 
     emit({ pct: 20, msg: 'Starting encode…' });
-    const { stdout: durOut } = await execFileAsync('ffprobe', [
-      '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioFile,
-    ]);
+    const { stdout: durOut } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioFile]);
     const totalSecs = parseFloat(durOut.trim()) || 0;
+
+    // Build phrase-timed captions using speaker time offsets
+    const callerStart  = ringDur;
+    const callerEnd    = ringDur + callerDur;
+    const haroldStart  = hasCallerAudio ? callerEnd : ringDur;
+    const haroldText_q = `"${haroldText}"`;
+
+    const allCaptionFilters = [
+      ...(hasCallerAudio ? buildTimedCaptions(callerText.slice(0, 200), callerStart, callerEnd) : []),
+      ...buildTimedCaptions(haroldText_q, haroldStart, totalSecs),
+    ];
+    const captionFilters = allCaptionFilters.join(',');
 
     const watermark = `drawtext=text="Harold's Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
 
-    let captionFilters;
-    if (hasCallerAudio && callerDur > 0) {
-      const cLines  = wrapText(callerText.slice(0, 180));
-      const hLines  = wrapText(`"${haroldText}"`);
-      const cTotalH = cLines.length * 52 + 30;
-      const hTotalH = hLines.length * 52 + 30;
-      const callerFilters = cLines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
-        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${cTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,0,${callerDur})'`;
-      });
-      const haroldFilters = hLines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
-        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${hTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='gte(t,${callerDur})'`;
-      });
-      captionFilters = [...callerFilters, ...haroldFilters].join(',');
-    } else {
-      const lines  = wrapText(`"${haroldText}"`);
-      const totalH = lines.length * 52 + 30;
-      captionFilters = lines.map((line, i) => {
-        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
-        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${totalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
-      }).join(',');
-    }
-
-    const vf = `scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,${watermark},${captionFilters}`;
+    // Scale/crop dimensions based on aspect ratio
+    const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
+    const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
+    const vf = `${scaleCrop},${watermark},${captionFilters}`;
 
     await runFfmpegProgress([
       '-loop', '1', '-i', tmpImg, '-i', audioFile,
@@ -487,7 +531,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       '-progress', 'pipe:1', '-nostats',
       '-y', tmpVid,
     ], totalSecs, pct => {
-      emit({ pct: Math.round(20 + pct * 70), msg: 'Encoding video…' }); // 20–90%
+      emit({ pct: Math.round(20 + pct * 70), msg: 'Encoding video…' });
     });
 
     emit({ pct: 93, msg: 'Packaging…' });
@@ -500,6 +544,27 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     res.end();
   } finally {
     [tmpImg, tmpCaller, tmpHarold, tmpCombined, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
+  }
+});
+
+// ── Save a produced post to history ──────────────────────────────────────────
+router.post('/api/save-post', adminAuth, (req, res) => {
+  const { callId, callType, caption } = req.body;
+  if (!caption) return res.status(400).json({ error: 'caption required' });
+  try {
+    const info = db.savePost(callId || null, callType || null, caption);
+    res.json({ id: info.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── List post history ─────────────────────────────────────────────────────────
+router.get('/api/post-history', adminAuth, (req, res) => {
+  try {
+    res.json({ posts: db.listPosts(50) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

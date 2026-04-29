@@ -56,6 +56,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_calls_recording_sid ON calls(recording_sid);
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS studio_posts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id    INTEGER,
+    call_type  TEXT,
+    caption    TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
@@ -160,6 +170,9 @@ const stmts = {
 
   updateWisdomText:     db.prepare(`UPDATE calls SET wisdom_text     = @wisdomText     WHERE call_sid = @callSid`),
   updateHaroldResponse: db.prepare(`UPDATE calls SET harold_response = @haroldResponse WHERE id = @id`),
+
+  savePost:  db.prepare(`INSERT INTO studio_posts (call_id, call_type, caption) VALUES (@callId, @callType, @caption)`),
+  listPosts: db.prepare(`SELECT * FROM studio_posts ORDER BY created_at DESC LIMIT ?`),
 
   // Wisdom pool
   pickWisdom:     db.prepare(`SELECT id, text FROM wisdoms ORDER BY RANDOM() LIMIT 1`),
@@ -299,6 +312,9 @@ module.exports = {
 
   updateWisdomText:     (callSid, wisdomText)       => stmts.updateWisdomText.run({ callSid, wisdomText }),
   updateHaroldResponse: (id, haroldResponse)        => stmts.updateHaroldResponse.run({ id, haroldResponse }),
+
+  savePost:  (callId, callType, caption) => stmts.savePost.run({ callId: callId || null, callType: callType || null, caption }),
+  listPosts: (limit = 50)                => stmts.listPosts.all(limit),
 
   // Wisdom pool
   pickWisdom:     ()             => stmts.pickWisdom.get(),

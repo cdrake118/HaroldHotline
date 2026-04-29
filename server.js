@@ -36,6 +36,22 @@ app.use('/studio', require('./routes/studio'));
 // Health check for Railway
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// Generate phone ring tone for studio videos (once, on first boot)
+const ringPath = path.join(__dirname, 'public', 'audio', 'ring.mp3');
+if (!fs.existsSync(ringPath)) {
+  const { execFile: _execFile } = require('child_process');
+  _execFile('ffmpeg', [
+    '-f', 'lavfi',
+    '-i', 'aevalsrc=0.25*sin(2*PI*440*t)+0.25*sin(2*PI*480*t):c=stereo:s=44100',
+    '-t', '1.8',
+    '-af', 'afade=t=in:st=0:d=0.1,afade=t=out:st=1.4:d=0.4',
+    '-y', ringPath,
+  ], (err) => {
+    if (err) console.warn('Could not generate ring.mp3:', err.message);
+    else console.log('Generated ring.mp3');
+  });
+}
+
 // Public stats — aggregate call counts only, no sensitive data
 app.get('/api/stats', (req, res) => {
   try {
