@@ -55,7 +55,10 @@ function wrapText(text, maxChars = 36) {
 function buildTimedCaptions(text, startSec, endSec, fontSize = 40) {
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (!words.length || endSec <= startSec) return [];
-  const CHUNK = 4;
+  // Ensure each phrase gets at least 0.7s — use fewer words per chunk for short audio
+  const totalDur  = endSec - startSec;
+  const maxChunks = Math.max(1, Math.floor(totalDur / 0.7));
+  const CHUNK     = Math.max(2, Math.ceil(words.length / maxChunks));
   const chunks = [];
   for (let i = 0; i < words.length; i += CHUNK) chunks.push(words.slice(i, i + CHUNK).join(' '));
   const chunkDur = (endSec - startSec) / chunks.length;
@@ -179,13 +182,13 @@ router.post('/api/generate-response', adminAuth, async (req, res) => {
     `You write responses for Harold's Hotline. Harold is a real tabby cat — dry, direct, a little cutting. ` +
     `He speaks his own mind through a British announcer, always in the third person.\n\n` +
     `A caller left the following ${typeLabel}:\n"${transcript}"\n\n` +
-    `Write Harold's response. Rules:\n` +
-    `- 1-2 sentences max. Punchy. No rambling.\n` +
-    `- Always third person — "Harold thinks...", "Harold is unmoved.", "Harold has noted..." — never "I"\n` +
+    `Write 3 distinct Harold responses. Return ONLY valid JSON:\n{"variations":["...","...","..."]}\n\n` +
+    `Rules for each:\n` +
+    `- 1-2 sentences. Punchy. Under 35 words.\n` +
+    `- Always third person — "Harold thinks...", "Harold is unmoved." — never "I"\n` +
     `- Harold judges. He does not comfort or moralize. He is a cat.\n` +
-    `- Dry wit is good. A little cutting is good. Surprisingly profound is also good.\n` +
-    `- Under 35 words.\n` +
-    `- No hashtags, emojis, or filler phrases.\n` +
+    `- Vary tone: try cutting/judgmental, absurdly deadpan, and unexpectedly profound.\n` +
+    `- No hashtags, emojis, or filler.\n` +
     `- Replace any real names with "the caller".`;
 
   try {
@@ -193,13 +196,16 @@ router.post('/api/generate-response', adminAuth, async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 80,
+      max_tokens: 250,
+      response_format: { type: 'json_object' },
     });
-    const response = completion.choices[0].message.content.trim();
+    const parsed    = JSON.parse(completion.choices[0].message.content);
+    const variations = Array.isArray(parsed.variations) ? parsed.variations.filter(Boolean) : [];
+    const response  = variations[0] || '';
     if (callId && db.updateHaroldResponse) {
       try { db.updateHaroldResponse(parseInt(callId, 10), response); } catch (_) {}
     }
-    res.json({ response });
+    res.json({ response, variations });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -437,6 +443,10 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
   const tmpVid      = path.join(os.tmpdir(), `studio-vid-${uid}.mp4`);
   const ringAudioPath = path.join(__dirname, '..', 'public', 'audio', 'ring.mp3');
 
+  const keepalive = setInterval(() => {
+    if (!res.writableEnded) { res.write(': keep-alive\n\n'); if (typeof res.flush === 'function') res.flush(); }
+  }, 10000);
+
   try {
     emit({ pct: 5, msg: 'Preparing files…' });
     fs.writeFileSync(tmpImg,    Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
@@ -525,7 +535,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     await runFfmpegProgress([
       '-loop', '1', '-i', tmpImg, '-i', audioFile,
       '-vf', vf,
-      '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k',
       '-shortest',
       '-progress', 'pipe:1', '-nostats',
@@ -543,6 +553,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     emit({ error: err.message || 'Failed to generate video' });
     res.end();
   } finally {
+    clearInterval(keepalive);
     [tmpImg, tmpCaller, tmpHarold, tmpCombined, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
   }
 });

@@ -821,18 +821,15 @@
           if (obj.done && obj.videoBase64) {
             const bytes = Uint8Array.from(atob(obj.videoBase64), c => c.charCodeAt(0));
             const blob  = new Blob([bytes], { type: 'video/mp4' });
-            // Download
-            const dlUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = dlUrl; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
-            // Preview
             if (state._videoBlobUrl) URL.revokeObjectURL(state._videoBlobUrl);
             state._videoBlobUrl = URL.createObjectURL(blob);
+            // Download and preview share one blob URL
+            const a = document.createElement('a');
+            a.href = state._videoBlobUrl; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
             const vid = document.getElementById('video-preview');
             vid.src = state._videoBlobUrl;
             document.getElementById('video-preview-wrap').style.display = 'block';
             vid.play().catch(() => {});
-            URL.revokeObjectURL(dlUrl);
             downloaded = true;
             dot('video', true);
             status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
@@ -889,9 +886,12 @@
       status.textContent = e?.error || 'Failed to generate response.'; status.className = 'status-line err';
       return;
     }
-    const { response } = await res.json();
+    const data = await res.json();
+    const { response, variations } = data;
     state.haroldResponse = response;
+    state.haroldVariations = variations?.length ? variations : null;
     document.getElementById('harold-response').value = response;
+    if (variations && variations.length) renderVariations(variations, 0);
     dot('script', true);
     updateGenerateButtons();
     status.textContent = "✓ Harold's response generated"; status.className = 'status-line ok';
@@ -1069,14 +1069,12 @@
           await generateHaroldResponse();
         }
       }
-      // 2. Caller audio — only if synthetic, OR if real call without explicit "use recording"
-      if (!state.callerAudioData && !state.useRecording) {
-        if (document.getElementById('caller-voice-select').value) {
-          await generateCallerAudio();
-        }
-      }
-      // 3. Harold audio
-      if (!state.haroldAudioData) await generateHaroldAudio();
+      // 2+3. Caller and Harold audio in parallel
+      await Promise.all([
+        (!state.callerAudioData && !state.useRecording && document.getElementById('caller-voice-select').value)
+          ? generateCallerAudio() : Promise.resolve(),
+        !state.haroldAudioData ? generateHaroldAudio() : Promise.resolve(),
+      ]);
       // 4. Image (skip if already chosen from gallery)
       if (!state.imageData) await generateImage();
       // 5. Caption
