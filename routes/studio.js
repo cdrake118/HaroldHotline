@@ -376,10 +376,10 @@ router.post('/api/generate-image', adminAuth, async (req, res) => {
     if (refFiles.length > 0) {
       const refBuffer = fs.readFileSync(path.join(HAROLD_REFS_DIR, refFiles[0]));
       const refFile   = await toFile(refBuffer, refFiles[0], { type: 'image/jpeg' });
-      const result = await openai.images.edit({ model: 'gpt-image-2', image: refFile, prompt: imagePrompt, size: '1024x1024', response_format: 'b64_json' });
+      const result = await openai.images.edit({ model: 'gpt-image-1', image: refFile, prompt: imagePrompt, size: '1024x1024' });
       imageB64 = result.data[0].b64_json;
     } else {
-      const result = await openai.images.generate({ model: 'gpt-image-2', prompt: imagePrompt, size: '1024x1024', response_format: 'b64_json' });
+      const result = await openai.images.generate({ model: 'gpt-image-1', prompt: imagePrompt, size: '1024x1024' });
       imageB64 = result.data[0].b64_json;
     }
 

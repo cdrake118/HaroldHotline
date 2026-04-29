@@ -244,7 +244,7 @@ router.post('/api/calls/:id/generate-response', adminAuth, async (req, res) => {
   }
 });
 
-// Step 2 — Realistic Harold photo via gpt-image-2
+// Step 2 — Realistic Harold photo via gpt-image-1
 router.post('/api/calls/:id/generate-image', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
   const call = db.getCallById(parseInt(req.params.id, 10));
@@ -279,19 +279,17 @@ router.post('/api/calls/:id/generate-image', adminAuth, async (req, res) => {
       const refBuffer = fs.readFileSync(path.join(HAROLD_REFS_DIR, refFiles[0]));
       const refFile   = await toFile(refBuffer, refFiles[0], { type: 'image/jpeg' });
       const result = await openai.images.edit({
-        model: 'gpt-image-2',
+        model: 'gpt-image-1',
         image: refFile,
         prompt: imagePrompt,
         size: '1024x1024',
-        response_format: 'b64_json',
       });
       imageB64 = result.data[0].b64_json;
     } else {
       const result = await openai.images.generate({
-        model: 'gpt-image-2',
+        model: 'gpt-image-1',
         prompt: imagePrompt,
         size: '1024x1024',
-        response_format: 'b64_json',
       });
       imageB64 = result.data[0].b64_json;
     }
