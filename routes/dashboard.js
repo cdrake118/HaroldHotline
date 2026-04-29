@@ -10,6 +10,7 @@ const fetch = require('node-fetch');
 const { OpenAI, toFile } = require('openai');
 const config = require('../config/harold');
 const db = require('../db');
+const { adminAuth, pageAuth } = require('../middleware/auth');
 
 const HAROLD_REFS_DIR = path.join(__dirname, '..', 'public', 'harold-refs');
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
@@ -17,7 +18,7 @@ const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBx
 const router = express.Router();
 
 // -- Dashboard page ------------------------------------------------------------
-router.get('/', (req, res) => {
+router.get('/', pageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'dashboard.html'));
 });
 
@@ -48,34 +49,18 @@ router.get('/api/debug', (req, res) => {
   });
 });
 
-// -- Admin auth ----------------------------------------------------------------
-function adminAuth(req, res, next) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return next();
-
-  const auth = req.headers.authorization || '';
-  if (auth.startsWith('Basic ')) {
-    const decoded = Buffer.from(auth.slice(6), 'base64').toString();
-    const pass = decoded.slice(decoded.indexOf(':') + 1);
-    if (pass === password) return next();
-  }
-
-  res.set('WWW-Authenticate', 'Basic realm="Harold Admin"');
-  res.status(401).json({ error: 'Authentication required' });
-}
-
 // -- REST API ------------------------------------------------------------------
 
-router.get('/api/stats', (req, res) => {
+router.get('/api/stats', adminAuth, (req, res) => {
   res.json(db.stats());
 });
 
-router.get('/api/stats/daily', (req, res) => {
+router.get('/api/stats/daily', adminAuth, (req, res) => {
   res.json(db.statsDaily());
 });
 
 // Search must be registered before /:id to avoid route conflict
-router.get('/api/calls/search', (req, res) => {
+router.get('/api/calls/search', adminAuth, (req, res) => {
   const q = (req.query.q || '').trim();
   const limit  = Math.min(parseInt(req.query.limit  || '25', 10), 200);
   const offset = parseInt(req.query.offset || '0', 10);
@@ -85,7 +70,7 @@ router.get('/api/calls/search', (req, res) => {
   res.json({ calls, total, limit, offset });
 });
 
-router.get('/api/calls', (req, res) => {
+router.get('/api/calls', adminAuth, (req, res) => {
   const limit        = Math.min(parseInt(req.query.limit  || '50', 10), 200);
   const offset       = parseInt(req.query.offset || '0', 10);
   const hasRecording = req.query.hasRecording === '1';
@@ -98,14 +83,14 @@ router.get('/api/calls', (req, res) => {
   res.json({ calls, total, limit, offset });
 });
 
-router.get('/api/calls/:id', (req, res) => {
+router.get('/api/calls/:id', adminAuth, (req, res) => {
   const call = db.getCallById(parseInt(req.params.id, 10));
   if (!call) return res.status(404).json({ error: 'Not found' });
   res.json(call);
 });
 
 // Proxy Twilio recording audio so the browser doesn't need Twilio credentials
-router.get('/api/calls/:id/recording', async (req, res) => {
+router.get('/api/calls/:id/recording', adminAuth, async (req, res) => {
   const call = db.getCallById(parseInt(req.params.id, 10));
   if (!call || !call.recording_sid) {
     return res.status(404).json({ error: 'No recording for this call' });

@@ -10,6 +10,7 @@ const fetch    = require('node-fetch');
 const { OpenAI, toFile } = require('openai');
 const config   = require('../config/harold');
 const db       = require('../db');
+const { adminAuth, pageAuth } = require('../middleware/auth');
 
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
 const HAROLD_REFS_DIR     = path.join(__dirname, '..', 'public', 'harold-refs');
@@ -20,19 +21,6 @@ const voicesCache = { voices: null, ts: 0 };
 const VOICES_TTL_MS = 60 * 60 * 1000;
 
 const router = express.Router();
-
-function adminAuth(req, res, next) {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) return next();
-  const auth = req.headers.authorization || '';
-  if (auth.startsWith('Basic ')) {
-    const decoded = Buffer.from(auth.slice(6), 'base64').toString();
-    const pass = decoded.slice(decoded.indexOf(':') + 1);
-    if (pass === password) return next();
-  }
-  res.set('WWW-Authenticate', 'Basic realm="Harold Admin"');
-  res.status(401).json({ error: 'Authentication required' });
-}
 
 function wrapText(text, maxChars = 36) {
   const words = text.split(' ');
@@ -104,7 +92,7 @@ function runFfmpegProgress(args, totalSecs, onPct) {
 }
 
 // ── Studio page ───────────────────────────────────────────────────────────────
-router.get('/', (req, res) => {
+router.get('/', pageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'studio.html'));
 });
 

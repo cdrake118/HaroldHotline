@@ -252,6 +252,7 @@
   </span>
   <button onclick="showHistory()" style="margin-left:14px;background:transparent;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.78rem">📋 History</button>
   <a class="nav-link" href="/dashboard" style="margin-left:10px">← Back to Dashboard</a>
+  <a href="/logout" onclick="localStorage.removeItem('adminCreds')" style="font-size:.78rem;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:7px;border:1px solid var(--border)" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Sign out</a>
 </header>
 
 <div class="studio-layout">
@@ -466,22 +467,19 @@
 <script>
   // -- Auth helper ---------------------------------------------------------------
   function getAdminCreds() {
-    const stored = sessionStorage.getItem('adminCreds');
-    if (stored) return stored;
-    const pass = prompt('Enter admin password:');
-    if (!pass) return null;
-    const creds = btoa(`:${pass}`);
-    sessionStorage.setItem('adminCreds', creds);
-    return creds;
+    return localStorage.getItem('adminCreds');
   }
 
   async function adminFetch(url, opts = {}) {
     const creds = getAdminCreds();
-    if (!creds) return null;
-    return fetch(url, {
-      ...opts,
-      headers: { ...(opts.headers || {}), Authorization: `Basic ${creds}` },
-    });
+    const headers = { ...(opts.headers || {}) };
+    if (creds) headers.Authorization = `Basic ${creds}`;
+    const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401) {
+      location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+      return null;
+    }
+    return res;
   }
 
   // -- State ---------------------------------------------------------------------

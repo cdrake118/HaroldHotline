@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harold's Hotline — Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f0f0f; color: #e5e5e5;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      width: 100%; max-width: 360px;
+      background: #1a1a1a; border: 1px solid #2e2e2e;
+      border-radius: 14px; padding: 36px 32px;
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .paw { font-size: 2.4rem; margin-bottom: 12px; }
+    h1 { font-size: 1.15rem; font-weight: 700; text-align: center; margin-bottom: 4px; }
+    .sub { font-size: .8rem; color: #737373; text-align: center; margin-bottom: 28px; }
+    label { display: block; font-size: .78rem; color: #737373; margin-bottom: 6px; align-self: flex-start; width: 100%; }
+    input[type=password] {
+      width: 100%; background: #222; color: #e5e5e5;
+      border: 1.5px solid #2e2e2e; border-radius: 8px;
+      padding: .55rem .75rem; font-size: .95rem; font-family: inherit;
+      margin-bottom: 18px; outline: none;
+    }
+    input[type=password]:focus { border-color: #f59e0b; }
+    button {
+      width: 100%; background: #f59e0b; color: #000;
+      border: none; border-radius: 8px; padding: .6rem;
+      font-size: .95rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    button:hover:not(:disabled) { background: #d97706; }
+    button:disabled { opacity: .5; cursor: default; }
+    .err { color: #f87171; font-size: .82rem; text-align: center; margin-top: 12px; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="paw">🐱</div>
+  <h1>Harold's Admin</h1>
+  <p class="sub">Dashboard &amp; Studio access</p>
+  <label for="pw">Password</label>
+  <input type="password" id="pw" autocomplete="current-password" autofocus />
+  <button id="btn">Enter</button>
+  <div class="err" id="err"></div>
+</div>
+<script>
+  const next = new URLSearchParams(location.search).get('next') || '/dashboard';
+
+  async function login() {
+    const password = document.getElementById('pw').value;
+    if (!password) return;
+    const btn = document.getElementById('btn');
+    const err = document.getElementById('err');
+    btn.disabled = true; btn.textContent = 'Checking…'; err.textContent = '';
+
+    try {
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        // Store creds in localStorage so API calls in dashboard/studio work across tabs
+        localStorage.setItem('adminCreds', btoa(':' + password));
+        location.href = next;
+      } else {
+        err.textContent = 'Incorrect password.';
+        btn.disabled = false; btn.textContent = 'Enter';
+        document.getElementById('pw').select();
+      }
+    } catch (_) {
+      err.textContent = 'Network error — try again.';
+      btn.disabled = false; btn.textContent = 'Enter';
+    }
+  }
+
+  document.getElementById('btn').addEventListener('click', login);
+  document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+</script>
+</body>
+</html>

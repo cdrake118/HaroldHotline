@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config/harold');
 const db = require('./db');
+const { makeToken } = require('./middleware/auth');
 
 const app = express();
 
@@ -27,6 +28,28 @@ app.use('/harold-gallery', express.static(path.join(__dirname, 'public', 'harold
 
 // Serve other static assets (favicon, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Login page
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'views', 'login.html')));
+
+app.post('/login', (req, res) => {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) return res.json({ ok: true });
+  const submitted = (req.body || {}).password;
+  if (!submitted || submitted !== password) {
+    return res.status(401).json({ error: 'Incorrect password' });
+  }
+  const token   = makeToken(password);
+  const maxAge  = 7 * 24 * 60 * 60; // 7 days in seconds
+  const secure  = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `harold_auth=${token}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`);
+  res.json({ ok: true });
+});
+
+app.get('/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'harold_auth=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax');
+  res.redirect('/login');
+});
 
 // Routes
 app.use('/voice', require('./routes/voice'));
