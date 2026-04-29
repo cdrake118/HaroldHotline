@@ -49,6 +49,13 @@ db.exec(`
   );
 `);
 
+// Indexes for common query patterns — safe to run on existing DBs
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_calls_created_at    ON calls(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_calls_caller_number ON calls(caller_number, created_at);
+  CREATE INDEX IF NOT EXISTS idx_calls_recording_sid ON calls(recording_sid);
+`);
+
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}

@@ -183,6 +183,16 @@
     .auto-btn:disabled { opacity: .45; cursor: default; }
     .auto-btn:hover:not(:disabled) { filter: brightness(1.1); }
 
+    .progress-track {
+      height: 5px; background: var(--border); border-radius: 3px;
+      overflow: hidden; margin: 10px 0 4px;
+    }
+    .progress-fill {
+      height: 100%; background: var(--amber); border-radius: 3px;
+      width: 0%; transition: width 0.35s ease;
+    }
+    .progress-label { font-size: .75rem; color: var(--muted); }
+
     @media(max-width: 640px) {
       .params-grid { grid-template-columns: 1fr; }
       .script-grid { grid-template-columns: 1fr; }
@@ -362,6 +372,10 @@
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
     </div>
+    <div id="video-progress-wrap" style="display:none">
+      <div class="progress-track"><div class="progress-fill" id="video-progress-fill"></div></div>
+      <div class="progress-label" id="video-progress-label"></div>
+    </div>
     <div class="status-line" id="status-video"></div>
   </div>
 
@@ -419,6 +433,11 @@
     callContext:     null,         // { id, caller_number, call_type, transcript, harold_response, hasRecording, ... }
     postText:        null,
   };
+
+  let activeGenerations = 0;
+  window.addEventListener('beforeunload', e => {
+    if (activeGenerations > 0) { e.preventDefault(); return (e.returnValue = 'A generation is in progress — leave anyway?'); }
+  });
 
   function isSyntheticMode() { return !state.callContext; }
 
@@ -641,13 +660,24 @@
   }
 
   // -- Step 5: Video -------------------------------------------------------------
+  function setVideoProgress(pct, msg) {
+    const wrap  = document.getElementById('video-progress-wrap');
+    const fill  = document.getElementById('video-progress-fill');
+    const label = document.getElementById('video-progress-label');
+    if (pct === 0 && !msg) { wrap.style.display = 'none'; fill.style.width = '0%'; return; }
+    wrap.style.display = 'block';
+    fill.style.width   = pct + '%';
+    label.textContent  = pct >= 100 ? '' : `${pct}% — ${msg}`;
+  }
+
   async function generateVideo() {
     if (!state.haroldAudioData || !state.imageData) return;
 
     const btn    = document.getElementById('btn-gen-video');
     const status = document.getElementById('status-video');
     btn.disabled = true; btn.textContent = '🎬 Generating…';
-    status.textContent = 'Assembling video — this takes about 20 seconds…'; status.className = 'status-line';
+    status.textContent = ''; status.className = 'status-line';
+    setVideoProgress(2, 'Starting…');
 
     const body = {
       imageData:       state.imageData,
@@ -663,27 +693,60 @@
       body.callerText      = document.getElementById('caller-script').value.trim();
     }
 
-    const res = await adminFetch('/studio/api/generate-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    btn.disabled = false; btn.textContent = '🎬 Generate & Download';
+    activeGenerations++;
+    try {
+      const creds = getAdminCreds();
+      if (!creds) return;
 
-    if (!res || !res.ok) {
-      const e = await res?.json().catch(() => ({}));
-      status.textContent = e?.error || 'Failed to generate video.'; status.className = 'status-line err';
-      return;
+      const res = await fetch('/studio/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${creds}` },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error || `HTTP ${res.status}`);
+      }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let downloaded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop(); // keep any partial trailing chunk
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          let obj;
+          try { obj = JSON.parse(part.slice(6)); } catch (_) { continue; }
+          if (obj.error) throw new Error(obj.error);
+          if (obj.pct !== undefined) setVideoProgress(obj.pct, obj.msg || '');
+          if (obj.done && obj.videoBase64) {
+            const bytes = Uint8Array.from(atob(obj.videoBase64), c => c.charCodeAt(0));
+            const blob  = new Blob([bytes], { type: 'video/mp4' });
+            const url   = URL.createObjectURL(blob);
+            const a     = document.createElement('a');
+            a.href = url; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
+            URL.revokeObjectURL(url);
+            downloaded = true;
+            dot('video', true);
+            status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
+          }
+        }
+      }
+      if (!downloaded) throw new Error('No video data received from server.');
+    } catch (err) {
+      setVideoProgress(0, '');
+      status.textContent = err.message || 'Failed to generate video.'; status.className = 'status-line err';
+    } finally {
+      activeGenerations--;
+      btn.disabled = false; btn.textContent = '🎬 Generate & Download';
     }
-
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
-    URL.revokeObjectURL(url);
-
-    dot('video', true);
-    status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
   }
 
   function escapeHtml(s) {

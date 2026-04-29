@@ -3,7 +3,7 @@ const path     = require('path');
 const fs       = require('fs');
 const os       = require('os');
 const crypto   = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const fetch    = require('node-fetch');
@@ -14,6 +14,10 @@ const db       = require('../db');
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
 const HAROLD_REFS_DIR     = path.join(__dirname, '..', 'public', 'harold-refs');
 const HAROLD_GALLERY_DIR  = path.join(__dirname, '..', 'public', 'harold-gallery');
+
+// Cache ElevenLabs voices for 1 hour to avoid a fresh API call on every studio load
+const voicesCache = { voices: null, ts: 0 };
+const VOICES_TTL_MS = 60 * 60 * 1000;
 
 const router = express.Router();
 
@@ -46,24 +50,51 @@ function wrapText(text, maxChars = 36) {
   return lines;
 }
 
+// Runs ffmpeg with real-time progress reporting via -progress pipe:1.
+// onPct(0..1) is called each time ffmpeg reports a new out_time_ms value.
+// out_time_ms is in microseconds despite the name; totalSecs is in seconds.
+function runFfmpegProgress(args, totalSecs, onPct) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', args);
+    let stderr = '';
+    let lastPct = 0;
+    proc.stdout.on('data', chunk => {
+      const m = chunk.toString().match(/out_time_ms=(\d+)/);
+      if (m && totalSecs > 0) {
+        const pct = Math.min(parseInt(m[1]) / (totalSecs * 1e6), 1);
+        if (pct > lastPct) { lastPct = pct; onPct(pct); }
+      }
+    });
+    proc.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    proc.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-400)}`));
+    });
+    proc.on('error', reject);
+  });
+}
+
 // ── Studio page ───────────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'studio.html'));
 });
 
-// ── List ElevenLabs voices ────────────────────────────────────────────────────
+// ── List ElevenLabs voices (cached 1h) ───────────────────────────────────────
 router.get('/api/voices', adminAuth, async (req, res) => {
   if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
   try {
-    const voicesRes = await fetch('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
-    });
-    if (!voicesRes.ok) throw new Error(`ElevenLabs voices error: ${voicesRes.status}`);
-    const { voices } = await voicesRes.json();
-    const filtered = voices
-      .filter(v => v.category === 'premade' && v.voice_id !== ELEVENLABS_VOICE_ID)
-      .map(v => ({ id: v.voice_id, name: v.name, labels: v.labels || {} }));
-    res.json({ voices: filtered });
+    if (!voicesCache.voices || Date.now() - voicesCache.ts > VOICES_TTL_MS) {
+      const voicesRes = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
+      });
+      if (!voicesRes.ok) throw new Error(`ElevenLabs voices error: ${voicesRes.status}`);
+      const { voices } = await voicesRes.json();
+      voicesCache.voices = voices
+        .filter(v => v.category === 'premade' && v.voice_id !== ELEVENLABS_VOICE_ID)
+        .map(v => ({ id: v.voice_id, name: v.name, labels: v.labels || {} }));
+      voicesCache.ts = Date.now();
+    }
+    res.json({ voices: voicesCache.voices });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -336,21 +367,36 @@ router.post('/api/generate-image', adminAuth, async (req, res) => {
   }
 });
 
-// ── Assemble final video ──────────────────────────────────────────────────────
+// ── Assemble final video (SSE — streams real % progress) ─────────────────────
 // Supports three modes:
 //   - haroldOnly:  no caller audio
 //   - aiCaller:    callerAudioData (base64 mp3) + callerText
 //   - realCaller:  useRecording=true + callId (Twilio fetch) + callerText
+//
+// Emits { pct, msg } events during encoding, then { pct:100, done:true, videoBase64 }.
 router.post('/api/generate-video', adminAuth, async (req, res) => {
-  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
-  const { imageData, callerAudioData, haroldAudioData, callerText, haroldText, useRecording, callId } = req.body;
-  if (!imageData || !haroldAudioData || !haroldText) {
-    return res.status(400).json({ error: 'imageData, haroldAudioData, and haroldText are required' });
+  // SSE — tell compression middleware to skip gzip for this stream
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-store, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  function emit(data) {
+    if (res.writableEnded) return;
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (typeof res.flush === 'function') res.flush();
   }
 
+  const { imageData, callerAudioData, haroldAudioData, callerText, haroldText, useRecording, callId } = req.body;
+
+  if (!imageData || !haroldAudioData || !haroldText) {
+    emit({ error: 'imageData, haroldAudioData, and haroldText are required' });
+    return res.end();
+  }
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
   if (hasCallerAudio && !callerText) {
-    return res.status(400).json({ error: 'callerText required when including caller audio' });
+    emit({ error: 'callerText required when including caller audio' });
+    return res.end();
   }
 
   const uid         = crypto.randomUUID();
@@ -361,6 +407,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
   const tmpVid      = path.join(os.tmpdir(), `studio-vid-${uid}.mp4`);
 
   try {
+    emit({ pct: 5, msg: 'Preparing files…' });
     fs.writeFileSync(tmpImg,    Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
     fs.writeFileSync(tmpHarold, Buffer.from(haroldAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
 
@@ -368,6 +415,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       if (callerAudioData) {
         fs.writeFileSync(tmpCaller, Buffer.from(callerAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
       } else {
+        emit({ pct: 10, msg: 'Fetching recording…' });
         const call = db.getCallById(parseInt(callId, 10));
         if (!call || !call.recording_sid) throw new Error('Call recording not available');
         const recUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Recordings/${call.recording_sid}.mp3`;
@@ -381,10 +429,12 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
     let audioFile = tmpHarold;
     let callerDur = 0;
     if (hasCallerAudio) {
+      emit({ pct: 15, msg: 'Measuring audio…' });
       const { stdout } = await execFileAsync('ffprobe', [
         '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller,
       ]);
       callerDur = parseFloat(stdout.trim()) || 0;
+      emit({ pct: 18, msg: 'Combining audio…' });
       await execFileAsync('ffmpeg', [
         '-i', tmpCaller, '-i', tmpHarold,
         '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
@@ -392,6 +442,12 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       ]);
       audioFile = tmpCombined;
     }
+
+    emit({ pct: 20, msg: 'Starting encode…' });
+    const { stdout: durOut } = await execFileAsync('ffprobe', [
+      '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioFile,
+    ]);
+    const totalSecs = parseFloat(durOut.trim()) || 0;
 
     const watermark = `drawtext=text="Harold's Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
 
@@ -421,21 +477,26 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
 
     const vf = `scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,${watermark},${captionFilters}`;
 
-    await execFileAsync('ffmpeg', [
+    await runFfmpegProgress([
       '-loop', '1', '-i', tmpImg, '-i', audioFile,
       '-vf', vf,
       '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k',
-      '-shortest', '-y', tmpVid,
-    ]);
+      '-shortest',
+      '-progress', 'pipe:1', '-nostats',
+      '-y', tmpVid,
+    ], totalSecs, pct => {
+      emit({ pct: Math.round(20 + pct * 70), msg: 'Encoding video…' }); // 20–90%
+    });
 
-    const videoBuffer = fs.readFileSync(tmpVid);
-    res.set('Content-Type', 'video/mp4');
-    res.set('Content-Disposition', `attachment; filename="harold-studio-${Date.now()}.mp4"`);
-    res.send(videoBuffer);
+    emit({ pct: 93, msg: 'Packaging…' });
+    const videoBase64 = fs.readFileSync(tmpVid).toString('base64');
+    emit({ pct: 100, done: true, videoBase64 });
+    res.end();
   } catch (err) {
     console.error('Studio generate video error:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate video' });
+    emit({ error: err.message || 'Failed to generate video' });
+    res.end();
   } finally {
     [tmpImg, tmpCaller, tmpHarold, tmpCombined, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
   }
