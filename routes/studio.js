@@ -150,23 +150,24 @@ router.post('/api/generate-response', adminAuth, async (req, res) => {
 
   const typeLabel = { confession: 'confession', question: 'question', speak: 'message', wisdom: 'wisdom reading' }[callType] || 'message';
   const prompt =
-    `You write responses for Harold's Hotline. Harold is a real tabby cat — dry, composed, mildly judgmental, unexpectedly wise. ` +
-    `A British announcer speaks on Harold's behalf, always in the third person.\n\n` +
+    `You write responses for Harold's Hotline. Harold is a real tabby cat — dry, direct, a little cutting. ` +
+    `He speaks his own mind through a British announcer, always in the third person.\n\n` +
     `A caller left the following ${typeLabel}:\n"${transcript}"\n\n` +
-    `Write Harold's response in 2-4 sentences. Rules:\n` +
-    `- Always third person — "Harold..." never "I..."\n` +
-    `- Dry and composed — Harold is quietly amused, never ruffled\n` +
-    `- If silly content, be wry. If serious, be unexpectedly profound.\n` +
-    `- Under 60 words\n` +
-    `- No hashtags, emojis, or social media language\n` +
-    `- Replace any real names with "the caller"`;
+    `Write Harold's response. Rules:\n` +
+    `- 1-2 sentences max. Punchy. No rambling.\n` +
+    `- Always third person — "Harold thinks...", "Harold is unmoved.", "Harold has noted..." — never "I"\n` +
+    `- Harold judges. He does not comfort or moralize. He is a cat.\n` +
+    `- Dry wit is good. A little cutting is good. Surprisingly profound is also good.\n` +
+    `- Under 35 words.\n` +
+    `- No hashtags, emojis, or filler phrases.\n` +
+    `- Replace any real names with "the caller".`;
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 150,
+      max_tokens: 80,
     });
     const response = completion.choices[0].message.content.trim();
     if (callId && db.updateHaroldResponse) {
@@ -226,7 +227,7 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
   const callTypeLabels = {
     emergency:  'a frantic cat emergency (cat stuck, acting strange, missing)',
     complaint:  'a complaint about the caller\'s own cat\'s baffling behavior',
-    confession: 'a heartfelt confession that the caller is telling Harold',
+    confession: 'a specific, embarrassing, real-sounding confession — the kind that makes people cringe and share. Make it petty, selfish, or mildly terrible. Not vague.',
     advice:     'a request for life advice from Harold the cat',
     wellness:   'a wellness check — the caller wants to make sure Harold is okay',
     tribute:    'a tribute — the caller is sharing how Harold has inspired them',
@@ -254,16 +255,16 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
     : '';
 
   const prompt =
-    `You are writing a script for Harold's Hotline — a real cat hotline where callers leave messages for Harold, a judgmental tabby cat. Harold cannot speak; he only meows.\n\n` +
+    `You are writing a script for Harold's Hotline — a real cat hotline where callers leave voicemails for Harold, a ruthlessly judgmental tabby cat.\n\n` +
     `Call type: ${callTypeLabels[callType] || callType}\n` +
     `Caller persona: ${personaLabels[callerPersona] || callerPersona}\n` +
     `Mood: ${moodLabels[mood] || mood}\n\n` +
     scenarioBlock +
-    `Write a realistic, charming call script. Return ONLY valid JSON (no markdown, no explanation):\n` +
+    `Return ONLY valid JSON (no markdown, no explanation):\n` +
     `{\n` +
-    `  "callerScript": "What the caller says — conversational, like leaving a voicemail. 3-5 sentences. Natural speech, including small filler words if appropriate.",\n` +
-    `  "haroldResponse": "Harold's response in 2-4 sentences. Written in third person by a dry British announcer speaking on Harold's behalf. Always third person (Harold never says I). Dry, composed, mildly judgmental. Under 60 words.",\n` +
-    `  "scene": "A 1-2 sentence description for a realistic photo of a tabby cat in a setting matching the mood — natural, no props, no text."\n` +
+    `  "callerScript": "What the caller says. Sound like a real voicemail — a little nervous, specific, conversational. 2-4 sentences. Natural filler words where appropriate. For confessions: specific and cringeworthy, not vague.",\n` +
+    `  "haroldResponse": "1-2 sentences. Harold speaks his own mind — direct, dry, a little cutting. Always third person: 'Harold thinks...', 'Harold has seen worse.', 'Harold is unmoved.' Under 35 words. No moralizing. No comforting. He is a cat.",\n` +
+    `  "scene": "1-2 sentence description for a realistic photo of a tabby cat matching the mood — natural setting, no props, no text."\n` +
     `}`;
 
   try {
