@@ -689,7 +689,7 @@
     <h2>Recent Calls</h2>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="refresh-btn" id="btn-filter-recording" onclick="toggleRecordingFilter()" title="Show only calls with a recording">🎙 Has Recording</button>
-      <button class="refresh-btn" onclick="loadCalls(0)">↻ Refresh</button>
+      <button class="refresh-btn" onclick="refreshAll()" title="Refresh stats, chart, and calls">↻ Refresh</button>
     </div>
   </div>
 
@@ -1437,16 +1437,16 @@
     // For non-admin viewers we don't know unavailable state — leave hidden.
   }
 
-  // Auto-refresh every 30s
-  loadStats();
-  loadCalls(0);
-  loadVolumeChart();
-  setInterval(() => {
+  // Manual refresh only — auto-refresh disabled to avoid interrupting in-progress actions.
+  function refreshAll() {
     loadStats();
     loadCalls(currentOffset);
     loadVolumeChart();
     if (adminLoaded) loadRateLimited();
-  }, 30000);
+  }
+  loadStats();
+  loadCalls(0);
+  loadVolumeChart();
 </script>
 </body>
 </html>
