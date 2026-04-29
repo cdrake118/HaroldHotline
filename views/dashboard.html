@@ -857,7 +857,7 @@
       <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
         <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
         <td data-label="Date">${formatDate(call.created_at)}</td>
-        <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${call.caller_call_count > 1 ? '<span class="returning-badge">↻ Returning</span>' : ''}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
+        <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${call.caller_call_count > 1 ? `<span class="returning-badge">↻ ${call.caller_call_count}×</span>` : ''}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
         <td data-label="Type">${typeBadge(call.call_type)}</td>
         <td data-label="Duration">${formatDuration(call.duration)}</td>
         <td data-label="Transcript">${transcriptBadge(call.transcript_status)}</td>
