@@ -866,10 +866,13 @@
         <td colspan="6" class="detail-cell">
           <div class="detail-inner">
             <div class="detail-box">
-              <h3>Transcript</h3>
-              ${call.transcript
-                ? `<p class="transcript-text">${escapeHtml(call.transcript)}</p>`
-                : `<p class="no-transcript">No transcript available${call.transcript_status === 'pending' ? ' yet — check back soon.' : '.'}</p>`
+              ${call.call_type === 'wisdom'
+                ? `<h3>Wisdom Served</h3>${call.wisdom_text
+                    ? `<p class="transcript-text" style="font-style:italic">"${escapeHtml(call.wisdom_text)}"</p>`
+                    : '<p class="no-transcript">Wisdom not recorded for this call.</p>'}`
+                : `<h3>Transcript</h3>${call.transcript
+                    ? `<p class="transcript-text">${escapeHtml(call.transcript)}</p>`
+                    : `<p class="no-transcript">No transcript available${call.transcript_status === 'pending' ? ' yet — check back soon.' : '.'}</p>`}`
               }
             </div>
             <div class="detail-box">

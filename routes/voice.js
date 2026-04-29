@@ -297,6 +297,7 @@ router.post('/wisdom', (req, res) => {
 
   const wisdomRow = db.pickWisdom();
   const wisdomText = wisdomRow ? wisdomRow.text : config.pickWisdom();
+  db.updateWisdomText(CallSid, wisdomText);
 
   twiml.say({ voice: config.announcerVoice }, config.wisdom.intro);
   twiml.say({ voice: config.announcerVoice }, wisdomText);
