@@ -87,11 +87,16 @@ app.get('/', (req, res) => {
   if (tt) socialParts.push(`<a href="https://www.tiktok.com/@${ttSlug}" target="_blank" rel="noopener">${ttGlyph} @${ttSlug}</a>`);
   const socialsHtml = socialParts.length ? `<div class="socials-bar">${socialParts.join('')}</div>` : '';
 
+  const baseUrl   = config.baseUrl || `https://haroldshotline.com`;
+  const ogImage   = process.env.OG_IMAGE_URL || process.env.HAROLD_PHOTO_URL || '';
+
   const html = template
+    .replace('{{BASE_URL}}',     baseUrl)
+    .replace(/\{\{OG_IMAGE_URL\}\}/g, ogImage)
     .replace('{{HAROLD_PHOTO}}', haroldPhoto)
-    .replace('{{PHONE_RAW}}', raw)
+    .replace('{{PHONE_RAW}}',    raw)
     .replace('{{PHONE_DISPLAY}}', phoneDisplay)
-    .replace('{{SOCIALS}}', socialsHtml);
+    .replace('{{SOCIALS}}',      socialsHtml);
 
   res.type('text/html').send(html);
 });
