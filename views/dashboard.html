@@ -853,6 +853,18 @@
       return;
     }
 
+    // Preserve expanded rows and generated post content across re-renders
+    const expandedIds = new Set(
+      [...document.querySelectorAll('.detail-row.open')].map(el => el.id.replace('detail-', ''))
+    );
+    const savedPosts = {};
+    expandedIds.forEach(id => {
+      const postEl = document.getElementById(`post-${id}`);
+      if (postEl && postEl.style.display !== 'none' && postEl.innerHTML.trim()) {
+        savedPosts[id] = postEl.innerHTML;
+      }
+    });
+
     tbody.innerHTML = calls.map((call, i) => `
       <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
         <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
@@ -898,6 +910,17 @@
         </td>
       </tr>
     `).join('');
+
+    // Restore expanded rows and any generated post content
+    expandedIds.forEach(id => {
+      const detail = document.getElementById(`detail-${id}`);
+      const row    = document.getElementById(`row-${id}`);
+      if (detail) { detail.classList.add('open'); row?.classList.add('expanded'); }
+      if (savedPosts[id]) {
+        const postEl = document.getElementById(`post-${id}`);
+        if (postEl) { postEl.innerHTML = savedPosts[id]; postEl.style.display = 'block'; }
+      }
+    });
   }
 
   function toggleDetail(id) {
