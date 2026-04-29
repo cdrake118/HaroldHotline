@@ -7,6 +7,56 @@ const db = require('../db');
 
 const router = express.Router();
 
+// ── Wisdom pool ───────────────────────────────────────────────────────────────
+const WISDOM_POOL_MIN  = 50;
+const WISDOM_BATCH_SIZE = 20;
+
+async function generateWisdomBatch() {
+  if (!process.env.OPENAI_API_KEY) return;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content:
+          `Generate ${WISDOM_BATCH_SIZE} unique pieces of cat wisdom from Harold, a confident and mildly judgmental tabby cat dispensing life advice to humans. ` +
+          `Each entry is a single self-contained piece of advice, 1-2 sentences. Harold's voice: direct, slightly smug, unexpectedly profound. ` +
+          `Vary the topics — consider sleep, food, territory, trust, presence, routine, observation, independence, contentment, warmth, patience. ` +
+          `Do NOT reference sunbeams. ` +
+          `Return ONLY a valid JSON array of strings, nothing else.`,
+      }],
+      max_tokens: 1500,
+    });
+    const raw = completion.choices[0].message.content.trim();
+    const lines = JSON.parse(raw);
+    if (Array.isArray(lines)) {
+      for (const text of lines) {
+        if (typeof text === 'string' && text.trim()) {
+          db.insertWisdom(text.trim(), 'ai');
+        }
+      }
+      console.log(`Generated ${lines.length} new wisdoms (pool now ${db.getWisdomCount()})`);
+    }
+  } catch (err) {
+    console.error('Wisdom generation error:', err);
+  }
+}
+
+function topUpWisdomPool() {
+  if (db.getWisdomCount() < WISDOM_POOL_MIN) {
+    generateWisdomBatch().catch(err => console.error('Wisdom top-up error:', err));
+  }
+}
+
+// Seed hardcoded wisdoms into DB on startup and top up if needed
+setImmediate(() => {
+  for (const text of config.wisdom.lines) {
+    db.insertWisdom(text, 'seed');
+  }
+  topUpWisdomPool();
+});
+
 // Helper: build a VoiceResponse, optionally playing audio or pausing
 function audioOrPause(node, url, pauseSecs) {
   if (url) {
@@ -245,9 +295,15 @@ router.post('/wisdom', (req, res) => {
   audioOrPause(twiml, config.audio.holdMusic, config.audio.holdMusicPauseSecs);
   audioOrPause(twiml, config.audio.haroldMeowingShort, config.audio.haroldMeowingShortPauseSecs);
 
+  const wisdomRow = db.pickWisdom();
+  const wisdomText = wisdomRow ? wisdomRow.text : config.pickWisdom();
+
   twiml.say({ voice: config.announcerVoice }, config.wisdom.intro);
-  twiml.say({ voice: config.announcerVoice }, config.pickWisdom());
+  twiml.say({ voice: config.announcerVoice }, wisdomText);
   twiml.say({ voice: config.announcerVoice }, config.wisdom.thankYouMessage());
+
+  // Non-blocking: top up pool in background if running low
+  setImmediate(topUpWisdomPool);
   twiml.hangup();
 
   res.type('text/xml');

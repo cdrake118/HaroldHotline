@@ -40,6 +40,13 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS wisdoms (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    text       TEXT UNIQUE NOT NULL,
+    source     TEXT DEFAULT 'ai',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Migrations for existing databases
@@ -141,6 +148,11 @@ const stmts = {
     HAVING call_count >= ?
     ORDER BY call_count DESC
   `),
+
+  // Wisdom pool
+  pickWisdom:     db.prepare(`SELECT id, text FROM wisdoms ORDER BY RANDOM() LIMIT 1`),
+  getWisdomCount: db.prepare(`SELECT COUNT(*) as count FROM wisdoms`),
+  insertWisdom:   db.prepare(`INSERT OR IGNORE INTO wisdoms (text, source) VALUES (@text, @source)`),
 };
 
 // Dynamic query helpers (can't be pre-prepared due to variable WHERE clauses)
@@ -272,4 +284,9 @@ module.exports = {
   setSetting: (key, value) => stmts.setSetting.run({ key, value }),
 
   getRateLimitedCallers: (limit) => stmts.getRateLimitedCallers.all(limit),
+
+  // Wisdom pool
+  pickWisdom:     ()             => stmts.pickWisdom.get(),
+  getWisdomCount: ()             => stmts.getWisdomCount.get().count,
+  insertWisdom:   (text, source) => stmts.insertWisdom.run({ text, source }),
 };

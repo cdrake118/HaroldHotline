@@ -166,6 +166,50 @@ router.get('/api/rate-limited', adminAuth, (req, res) => {
   res.json(db.getRateLimitedCallers(limit));
 });
 
+// ── Wisdom pool ───────────────────────────────────────────────────────────────
+
+router.get('/api/wisdoms/count', (req, res) => {
+  res.json({ count: db.getWisdomCount() });
+});
+
+router.post('/api/wisdoms/generate', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY is not configured' });
+  }
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const batchSize = Math.min(parseInt(req.body.count || '20', 10), 50);
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content:
+          `Generate ${batchSize} unique pieces of cat wisdom from Harold, a confident and mildly judgmental tabby cat dispensing life advice to humans. ` +
+          `Each entry is a single self-contained piece of advice, 1-2 sentences. Harold's voice: direct, slightly smug, unexpectedly profound. ` +
+          `Vary the topics — consider sleep, food, territory, trust, presence, routine, observation, independence, contentment, warmth, patience. ` +
+          `Do NOT reference sunbeams. ` +
+          `Return ONLY a valid JSON array of strings, nothing else.`,
+      }],
+      max_tokens: 2000,
+    });
+    const raw = completion.choices[0].message.content.trim();
+    const lines = JSON.parse(raw);
+    let added = 0;
+    if (Array.isArray(lines)) {
+      for (const text of lines) {
+        if (typeof text === 'string' && text.trim()) {
+          const result = db.insertWisdom(text.trim(), 'ai');
+          if (result.changes) added++;
+        }
+      }
+    }
+    res.json({ added, total: db.getWisdomCount() });
+  } catch (err) {
+    console.error('Wisdom generate error:', err);
+    res.status(500).json({ error: 'Failed to generate wisdoms' });
+  }
+});
+
 // ── Voiceover generator ───────────────────────────────────────────────────────
 router.post('/api/voiceover', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
