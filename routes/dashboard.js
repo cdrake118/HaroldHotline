@@ -1,10 +1,18 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const fetch = require('node-fetch');
-const { OpenAI } = require('openai');
+const { OpenAI, toFile } = require('openai');
 const config = require('../config/harold');
 const db = require('../db');
+
+const HAROLD_REFS_DIR = path.join(__dirname, '..', 'public', 'harold-refs');
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
 
 const router = express.Router();
 
@@ -207,6 +215,189 @@ router.post('/api/wisdoms/generate', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('Wisdom generate error:', err);
     res.status(500).json({ error: 'Failed to generate wisdoms' });
+  }
+});
+
+// ── Social content pipeline ───────────────────────────────────────────────────
+
+// Step 1 — Harold's third-person response text
+router.post('/api/calls/:id/generate-response', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+
+  const sourceText = call.transcript || call.wisdom_text;
+  if (!sourceText) return res.status(400).json({ error: 'No transcript or wisdom to respond to' });
+
+  const typeLabel = { confession: 'confession', question: 'question', speak: 'message', wisdom: 'wisdom reading' }[call.call_type] || 'message';
+
+  const prompt =
+    `You write responses for Harold's Hotline. Harold is a real tabby cat — dry, composed, mildly judgmental, unexpectedly wise. ` +
+    `A British announcer speaks on Harold's behalf, always in the third person.\n\n` +
+    `A caller left the following ${typeLabel}:\n"${sourceText}"\n\n` +
+    `Write Harold's response in 2–4 sentences. Rules:\n` +
+    `- Always third person — "Harold..." never "I..."\n` +
+    `- Dry and composed — Harold is quietly amused, never ruffled\n` +
+    `- If silly content, be wry. If serious, be unexpectedly profound.\n` +
+    `- Under 60 words\n` +
+    `- No hashtags, emojis, or social media language\n` +
+    `- Replace any real names with "the caller"`;
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 150,
+    });
+    const response = completion.choices[0].message.content.trim();
+    db.updateHaroldResponse(call.id, response);
+    res.json({ response });
+  } catch (err) {
+    console.error('Generate response error:', err);
+    res.status(500).json({ error: 'Failed to generate response' });
+  }
+});
+
+// Step 2 — Realistic Harold photo via gpt-image-2
+router.post('/api/calls/:id/generate-image', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    // Generate a realistic scene description from Harold's response or source content
+    const sourceText = call.harold_response || call.transcript || call.wisdom_text || '';
+    const sceneComp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content:
+        `Based on this text from Harold's Hotline, describe a single realistic cat photo scene.\n"${sourceText}"\n\n` +
+        `Rules: natural and realistic only — a real cat in a real setting (napping, looking out a window, sitting still, watching something, grooming, perched somewhere). ` +
+        `No human props, no staged or anthropomorphic poses. 1–2 sentences, specific and visual.`,
+      }],
+      max_tokens: 80,
+    });
+    const scene = sceneComp.choices[0].message.content.trim();
+
+    const imagePrompt =
+      `A natural, candid photograph of a tabby cat. ${scene} ` +
+      `Photorealistic, natural lighting, no anthropomorphism, no props, no text.`;
+
+    // Use reference photos if available
+    let refFiles = [];
+    try { refFiles = fs.readdirSync(HAROLD_REFS_DIR).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f)); } catch (_) {}
+
+    let imageB64;
+    if (refFiles.length > 0) {
+      const refBuffer = fs.readFileSync(path.join(HAROLD_REFS_DIR, refFiles[0]));
+      const refFile   = await toFile(refBuffer, refFiles[0], { type: 'image/jpeg' });
+      const result = await openai.images.edit({
+        model: 'gpt-image-2',
+        image: refFile,
+        prompt: imagePrompt,
+        size: '1024x1024',
+        response_format: 'b64_json',
+      });
+      imageB64 = result.data[0].b64_json;
+    } else {
+      const result = await openai.images.generate({
+        model: 'gpt-image-2',
+        prompt: imagePrompt,
+        size: '1024x1024',
+        response_format: 'b64_json',
+      });
+      imageB64 = result.data[0].b64_json;
+    }
+
+    res.json({ image: `data:image/png;base64,${imageB64}`, scene });
+  } catch (err) {
+    console.error('Generate image error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate image' });
+  }
+});
+
+// Step 3 — Combine image + ElevenLabs TTS into downloadable mp4
+function wrapText(text, maxChars = 36) {
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    if (current && (current + ' ' + word).length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? current + ' ' + word : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+router.post('/api/calls/:id/generate-video', adminAuth, async (req, res) => {
+  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+
+  const { imageData, responseText } = req.body;
+  if (!imageData || !responseText) return res.status(400).json({ error: 'imageData and responseText are required' });
+
+  const uid = crypto.randomUUID();
+  const tmpImg = path.join(os.tmpdir(), `harold-${uid}.jpg`);
+  const tmpAud = path.join(os.tmpdir(), `harold-${uid}.mp3`);
+  const tmpVid = path.join(os.tmpdir(), `harold-${uid}.mp4`);
+
+  try {
+    // Save image
+    const imgBuffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    fs.writeFileSync(tmpImg, imgBuffer);
+
+    // ElevenLabs TTS
+    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: responseText,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+    if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
+    fs.writeFileSync(tmpAud, await ttsRes.buffer());
+
+    // Build ffmpeg caption overlay
+    const lines = wrapText(`"${responseText}"`);
+    const lineH = 52;
+    const totalH = lines.length * lineH + 30;
+    const textFilters = lines.map((line, i) => {
+      const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "’").replace(/:/g, '\\:');
+      const y    = `h-${totalH - i * lineH}`;
+      return `drawtext=text='${safe}':x=(w-text_w)/2:y=${y}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
+    }).join(',');
+
+    const watermark = `drawtext=text="Harold’s Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
+
+    const vf = `scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,${watermark},${textFilters}`;
+
+    await execFileAsync('ffmpeg', [
+      '-loop', '1', '-i', tmpImg,
+      '-i', tmpAud,
+      '-vf', vf,
+      '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '192k',
+      '-shortest', '-y', tmpVid,
+    ]);
+
+    const videoBuffer = fs.readFileSync(tmpVid);
+    res.set('Content-Type', 'video/mp4');
+    res.set('Content-Disposition', `attachment; filename="harold-${call.id}.mp4"`);
+    res.send(videoBuffer);
+  } catch (err) {
+    console.error('Generate video error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate video' });
+  } finally {
+    [tmpImg, tmpAud, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
   }
 });
 

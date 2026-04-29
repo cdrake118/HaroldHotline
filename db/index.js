@@ -52,6 +52,7 @@ db.exec(`
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
+try { db.exec(`ALTER TABLE calls ADD COLUMN harold_response TEXT`); } catch (_) {}
 
 const stmts = {
   upsertCall: db.prepare(`
@@ -150,7 +151,8 @@ const stmts = {
     ORDER BY call_count DESC
   `),
 
-  updateWisdomText: db.prepare(`UPDATE calls SET wisdom_text = @wisdomText WHERE call_sid = @callSid`),
+  updateWisdomText:     db.prepare(`UPDATE calls SET wisdom_text     = @wisdomText     WHERE call_sid = @callSid`),
+  updateHaroldResponse: db.prepare(`UPDATE calls SET harold_response = @haroldResponse WHERE id = @id`),
 
   // Wisdom pool
   pickWisdom:     db.prepare(`SELECT id, text FROM wisdoms ORDER BY RANDOM() LIMIT 1`),
@@ -288,7 +290,8 @@ module.exports = {
 
   getRateLimitedCallers: (limit) => stmts.getRateLimitedCallers.all(limit),
 
-  updateWisdomText: (callSid, wisdomText) => stmts.updateWisdomText.run({ callSid, wisdomText }),
+  updateWisdomText:     (callSid, wisdomText)       => stmts.updateWisdomText.run({ callSid, wisdomText }),
+  updateHaroldResponse: (id, haroldResponse)        => stmts.updateHaroldResponse.run({ id, haroldResponse }),
 
   // Wisdom pool
   pickWisdom:     ()             => stmts.pickWisdom.get(),

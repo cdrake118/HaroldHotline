@@ -418,6 +418,72 @@
       text-transform: uppercase;
     }
 
+    /* ── Social content pipeline ────────────────────────────────────────── */
+    .social-section {
+      margin-top: 1rem;
+      padding-top: .75rem;
+      border-top: 1px solid var(--border);
+    }
+    .social-steps {
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+    .social-step {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+    }
+    .social-step-header {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin-bottom: .5rem;
+    }
+    .step-num {
+      background: var(--amber);
+      color: #fff;
+      font-size: .7rem;
+      font-weight: 800;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .social-step h4 { font-size: .85rem; font-weight: 700; margin: 0; }
+    .social-btn {
+      background: var(--amber); border: none; border-radius: 8px;
+      padding: .35rem .8rem; font-size: .82rem; font-weight: 600;
+      color: #fff; cursor: pointer; transition: background .15s;
+    }
+    .social-btn:hover:not(:disabled) { background: var(--amber-dk); }
+    .social-btn:disabled { opacity: .45; cursor: default; }
+    .social-btn.secondary {
+      background: var(--surface); color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+    .social-btn.secondary:hover:not(:disabled) { background: var(--amber-lt); border-color: var(--amber); }
+
+    .response-textarea {
+      width: 100%; min-height: 70px;
+      padding: .5rem .7rem;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: .88rem; line-height: 1.5;
+      resize: vertical; margin-top: .4rem;
+    }
+    .response-textarea:focus { outline: none; border-color: var(--amber); }
+    .social-image-preview {
+      margin-top: .5rem;
+      max-width: 220px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    .social-scene-label {
+      font-size: .72rem; color: var(--muted); font-style: italic; margin-top: .3rem;
+    }
+    .btn-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
+
     /* ── Status banner (unavailable mode) ────────────────────────────────── */
     .status-banner {
       background: var(--red);
@@ -905,13 +971,52 @@
             </button>
             ${call.recording_sid ? `<button class="admin-btn danger" onclick="event.stopPropagation();adminDeleteRecording(${call.id})">🗑 Delete recording</button>` : ''}
             ${call.transcript ? `<button class="admin-btn" onclick="event.stopPropagation();generatePost(${call.id})">✨ Generate post</button>` : ''}
+            ${(call.transcript || call.wisdom_text) ? `<button class="admin-btn" onclick="event.stopPropagation();toggleSocial(${call.id})">📱 Social video</button>` : ''}
           </div>
           <div id="post-${call.id}" style="display:none"></div>
+          <div id="social-${call.id}" style="display:none">
+            <div class="social-section">
+              <div class="social-steps">
+                <div class="social-step">
+                  <div class="social-step-header">
+                    <span class="step-num">1</span>
+                    <h4>Harold's Response</h4>
+                  </div>
+                  <div class="btn-row">
+                    <button class="social-btn" onclick="event.stopPropagation();generateSocialResponse(${call.id})">Generate</button>
+                    <button class="social-btn secondary" id="regen-resp-${call.id}" onclick="event.stopPropagation();generateSocialResponse(${call.id})" style="display:none">↻ Regenerate</button>
+                  </div>
+                  <textarea class="response-textarea" id="resp-text-${call.id}" placeholder="Harold's response will appear here…" oninput="socialState[${call.id}] = socialState[${call.id}] || {}; socialState[${call.id}].response = this.value">${call.harold_response ? escapeHtml(call.harold_response) : ''}</textarea>
+                </div>
+                <div class="social-step">
+                  <div class="social-step-header">
+                    <span class="step-num">2</span>
+                    <h4>Harold's Photo</h4>
+                  </div>
+                  <div class="btn-row">
+                    <button class="social-btn" onclick="event.stopPropagation();generateSocialImage(${call.id})">Generate image</button>
+                    <button class="social-btn secondary" id="regen-img-${call.id}" onclick="event.stopPropagation();generateSocialImage(${call.id})" style="display:none">↻ Regenerate</button>
+                  </div>
+                  <div id="img-preview-${call.id}"></div>
+                </div>
+                <div class="social-step">
+                  <div class="social-step-header">
+                    <span class="step-num">3</span>
+                    <h4>Generate Video</h4>
+                  </div>
+                  <div class="btn-row">
+                    <button class="social-btn" id="vid-btn-${call.id}" onclick="event.stopPropagation();generateSocialVideo(${call.id})">🎬 Generate &amp; download</button>
+                  </div>
+                  <div id="vid-status-${call.id}" style="font-size:.8rem;color:var(--muted);margin-top:.4rem"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </td>
       </tr>
     `).join('');
 
-    // Restore expanded rows and any generated post content
+    // Restore expanded rows, generated posts, and social panels
     expandedIds.forEach(id => {
       const detail = document.getElementById(`detail-${id}`);
       const row    = document.getElementById(`row-${id}`);
@@ -919,6 +1024,25 @@
       if (savedPosts[id]) {
         const postEl = document.getElementById(`post-${id}`);
         if (postEl) { postEl.innerHTML = savedPosts[id]; postEl.style.display = 'block'; }
+      }
+      // Restore social panel state
+      if (socialState[id]) {
+        const s = socialState[id];
+        const panel = document.getElementById(`social-${id}`);
+        if (panel && panel.style.display !== 'none') {
+          if (s.response) {
+            const ta = document.getElementById(`resp-text-${id}`);
+            if (ta) ta.value = s.response;
+            const regenBtn = document.getElementById(`regen-resp-${id}`);
+            if (regenBtn) regenBtn.style.display = 'inline-block';
+          }
+          if (s.imageData) {
+            const preview = document.getElementById(`img-preview-${id}`);
+            if (preview) preview.innerHTML = `<img src="${s.imageData}" class="social-image-preview" /><div class="social-scene-label">${escapeHtml(s.scene || '')}</div>`;
+            const regenImg = document.getElementById(`regen-img-${id}`);
+            if (regenImg) regenImg.style.display = 'inline-block';
+          }
+        }
       }
     });
   }
@@ -1040,6 +1164,76 @@
     } else if (res) {
       alert('Failed to delete recording.');
     }
+  }
+
+  // ── Social content pipeline ───────────────────────────────────────────────
+  const socialState = {}; // { [id]: { response, imageData, scene } }
+
+  function toggleSocial(id) {
+    const el = document.getElementById(`social-${id}`);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    // Pre-fill textarea if harold_response already stored
+    const ta = document.getElementById(`resp-text-${id}`);
+    if (ta && ta.value) document.getElementById(`regen-resp-${id}`).style.display = 'inline-block';
+  }
+
+  async function generateSocialResponse(id) {
+    const btn  = document.querySelector(`#social-${id} .social-btn`);
+    btn.disabled = true; btn.textContent = 'Generating…';
+    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-response`, { method: 'POST' });
+    btn.disabled = false; btn.textContent = 'Generate';
+    if (!res || !res.ok) { const e = await res?.json().catch(()=>{}); alert(e?.error || 'Failed.'); return; }
+    const { response } = await res.json();
+    socialState[id] = { ...(socialState[id] || {}), response };
+    document.getElementById(`resp-text-${id}`).value = response;
+    document.getElementById(`regen-resp-${id}`).style.display = 'inline-block';
+  }
+
+  async function generateSocialImage(id) {
+    const btn = document.getElementById(`regen-img-${id}`);
+    const genBtn = document.querySelector(`#social-${id} .social-step:nth-child(2) .social-btn`);
+    genBtn.disabled = true; genBtn.textContent = 'Generating…';
+    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-image`, { method: 'POST' });
+    genBtn.disabled = false; genBtn.textContent = 'Generate image';
+    if (!res || !res.ok) { const e = await res?.json().catch(()=>{}); alert(e?.error || 'Failed.'); return; }
+    const { image, scene } = await res.json();
+    socialState[id] = { ...(socialState[id] || {}), imageData: image, scene };
+    const preview = document.getElementById(`img-preview-${id}`);
+    preview.innerHTML = `<img src="${image}" class="social-image-preview" /><div class="social-scene-label">${escapeHtml(scene)}</div>`;
+    btn.style.display = 'inline-block';
+  }
+
+  async function generateSocialVideo(id) {
+    const s = socialState[id] || {};
+    const responseText = document.getElementById(`resp-text-${id}`)?.value?.trim() || s.response;
+    const imageData    = s.imageData;
+    if (!responseText) { alert('Generate a response first (Step 1).'); return; }
+    if (!imageData)    { alert('Generate an image first (Step 2).'); return; }
+
+    const btn    = document.getElementById(`vid-btn-${id}`);
+    const status = document.getElementById(`vid-status-${id}`);
+    btn.disabled = true; btn.textContent = '🎬 Generating…';
+    status.textContent = 'Harold is being filmed… this takes about 15 seconds.';
+
+    const res = await adminFetch(`/dashboard/api/calls/${id}/generate-video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData, responseText }),
+    });
+    btn.disabled = false; btn.textContent = '🎬 Generate & download';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(()=>{});
+      status.textContent = ''; alert(e?.error || 'Failed to generate video.');
+      return;
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `harold-${id}.mp4`; a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = '✓ Downloaded!';
   }
 
   // ── Call volume chart ─────────────────────────────────────────────────────
