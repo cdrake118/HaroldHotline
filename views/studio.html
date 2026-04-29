@@ -184,14 +184,39 @@
     .auto-btn:hover:not(:disabled) { filter: brightness(1.1); }
 
     .progress-track {
-      height: 5px; background: var(--border); border-radius: 3px;
-      overflow: hidden; margin: 10px 0 4px;
+      height: 14px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden; margin: 12px 0 6px; position: relative;
     }
     .progress-fill {
-      height: 100%; background: var(--amber); border-radius: 3px;
-      width: 0%; transition: width 0.35s ease;
+      height: 100%; background: linear-gradient(90deg, var(--amber-dk), var(--amber), var(--amber-lt));
+      border-radius: 7px; width: 0%; transition: width 0.35s ease;
+      box-shadow: 0 0 12px rgba(245,158,11,.5);
     }
-    .progress-label { font-size: .75rem; color: var(--muted); }
+    /* Animated indeterminate stripes — shown when waiting between progress events */
+    .progress-fill.indeterminate {
+      background: repeating-linear-gradient(
+        45deg, var(--amber) 0 12px, var(--amber-dk) 12px 24px
+      );
+      background-size: 34px 100%;
+      animation: progress-stripes 1s linear infinite;
+    }
+    @keyframes progress-stripes {
+      from { background-position: 0 0; }
+      to   { background-position: 34px 0; }
+    }
+    .progress-label {
+      font-size: .88rem; color: var(--text); font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .progress-label::before {
+      content: ''; width: 10px; height: 10px; border-radius: 50%;
+      background: var(--amber); box-shadow: 0 0 8px var(--amber);
+      animation: progress-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes progress-pulse {
+      0%, 100% { opacity: 1;   transform: scale(1); }
+      50%      { opacity: .35; transform: scale(.7); }
+    }
 
     .variations-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;
@@ -748,14 +773,26 @@
   }
 
   // -- Step 5: Video -------------------------------------------------------------
+  let progressIdleTimer = null;
   function setVideoProgress(pct, msg) {
     const wrap  = document.getElementById('video-progress-wrap');
     const fill  = document.getElementById('video-progress-fill');
     const label = document.getElementById('video-progress-label');
-    if (pct === 0 && !msg) { wrap.style.display = 'none'; fill.style.width = '0%'; return; }
+    if (pct === 0 && !msg) {
+      wrap.style.display = 'none'; fill.style.width = '0%';
+      fill.classList.remove('indeterminate');
+      clearTimeout(progressIdleTimer); return;
+    }
     wrap.style.display = 'block';
-    fill.style.width   = pct + '%';
-    label.textContent  = pct >= 100 ? '' : `${pct}% — ${msg}`;
+    fill.classList.remove('indeterminate');
+    // Always show at least 4% so the bar is visibly filled even on the very first event
+    fill.style.width  = Math.max(pct, 4) + '%';
+    label.textContent = pct >= 100 ? 'Finishing up…' : `${pct}% — ${msg || 'working…'}`;
+    // If no progress event arrives within 4s, switch to indeterminate stripes
+    clearTimeout(progressIdleTimer);
+    if (pct < 100) {
+      progressIdleTimer = setTimeout(() => fill.classList.add('indeterminate'), 4000);
+    }
   }
 
   async function generateVideo() {
@@ -786,14 +823,19 @@
     activeGenerations++;
     try {
       const creds = getAdminCreds();
-      if (!creds) return;
+      const headers = { 'Content-Type': 'application/json' };
+      if (creds) headers.Authorization = `Basic ${creds}`;
 
       const res = await fetch('/studio/api/generate-video', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${creds}` },
+        headers,
         body: JSON.stringify(body),
       });
 
+      if (res.status === 401) {
+        location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+        return;
+      }
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e?.error || `HTTP ${res.status}`);
@@ -836,7 +878,10 @@
       }
       if (!downloaded) throw new Error('No video data received from server.');
     } catch (err) {
-      setVideoProgress(0, '');
+      // Keep the progress bar visible so the user can see where it stopped, but stop the animation
+      clearTimeout(progressIdleTimer);
+      document.getElementById('video-progress-fill').classList.remove('indeterminate');
+      document.getElementById('video-progress-label').textContent = '✗ ' + (err.message || 'Failed');
       status.textContent = err.message || 'Failed to generate video.'; status.className = 'status-line err';
     } finally {
       activeGenerations--;

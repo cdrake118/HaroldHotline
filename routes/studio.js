@@ -401,7 +401,9 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
   // SSE — tell compression middleware to skip gzip for this stream
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-store, no-transform');
+  res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  if (res.socket && typeof res.socket.setNoDelay === 'function') res.socket.setNoDelay(true);
   res.flushHeaders();
 
   function emit(data) {
