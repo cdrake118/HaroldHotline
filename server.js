@@ -20,6 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Routes
 app.use('/voice', require('./routes/voice'));
 app.use('/dashboard', require('./routes/dashboard'));
+app.use('/studio', require('./routes/studio'));
 
 // Health check for Railway
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

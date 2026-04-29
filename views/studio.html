@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harold's Production Studio</title>
+  <style>
+    :root {
+      --bg:       #0f0f0f;
+      --surface:  #1a1a1a;
+      --surface2: #222;
+      --border:   #2e2e2e;
+      --amber:    #f59e0b;
+      --amber-dk: #d97706;
+      --amber-lt: #fcd34d;
+      --text:     #e5e5e5;
+      --muted:    #737373;
+      --green:    #22c55e;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
+
+    header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 18px 28px; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header .paw { font-size: 2rem; }
+    header h1 { font-size: 1.3rem; font-weight: 700; }
+    header p  { font-size: .82rem; color: var(--muted); }
+    .nav-link {
+      margin-left: auto; font-size: .82rem;
+      color: var(--amber); text-decoration: none;
+    }
+    .nav-link:hover { color: var(--amber-lt); }
+
+    .studio-layout {
+      max-width: 860px; margin: 0 auto;
+      padding: 32px 24px 80px;
+      display: flex; flex-direction: column; gap: 28px;
+    }
+
+    .step-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px 24px;
+    }
+    .step-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 18px;
+    }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--amber); color: #000;
+      font-weight: 700; font-size: .82rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-num.done { background: var(--green); color: #fff; }
+    .step-header h2 { font-size: 1rem; font-weight: 700; }
+    .step-header .badge {
+      margin-left: auto; font-size: .75rem; color: var(--muted);
+      background: var(--surface2); padding: 2px 8px; border-radius: 20px;
+    }
+
+    .params-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+    }
+    .param-group label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
+    .param-group select {
+      width: 100%; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: .45rem .6rem; font-size: .88rem; font-family: inherit;
+    }
+    .param-group select:focus { outline: none; border-color: var(--amber); }
+
+    .action-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--amber); color: #000;
+      border: none; border-radius: 8px; padding: .5rem 1.2rem;
+      font-size: .88rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .action-btn:hover:not(:disabled) { background: var(--amber-dk); }
+    .action-btn:disabled { opacity: .45; cursor: default; }
+    .action-btn.secondary {
+      background: transparent; color: var(--amber);
+      border: 1px solid var(--amber);
+    }
+    .action-btn.secondary:hover:not(:disabled) { background: rgba(245,158,11,.1); }
+
+    .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+
+    textarea {
+      width: 100%; background: var(--surface2); color: var(--text);
+      border: 1.5px solid var(--border); border-radius: 8px;
+      padding: .55rem .7rem; font-family: inherit; font-size: .88rem;
+      line-height: 1.5; resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: var(--amber); }
+
+    .script-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .script-block label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
+    .script-block textarea { min-height: 130px; }
+
+    .voice-row {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 12px;
+    }
+    .voice-row select {
+      flex: 1; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: .45rem .6rem; font-size: .88rem; font-family: inherit;
+    }
+    .voice-row select:focus { outline: none; border-color: var(--amber); }
+
+    .audio-player-wrap { margin-top: 8px; }
+    .audio-player-wrap audio { width: 100%; height: 36px; filter: invert(1) hue-rotate(180deg); }
+
+    .image-preview { margin-top: 12px; }
+    .image-preview img { width: 100%; max-width: 380px; border-radius: 8px; border: 1px solid var(--border); }
+    .scene-label { font-size: .78rem; color: var(--muted); margin-top: 6px; font-style: italic; }
+
+    .status-line {
+      font-size: .82rem; color: var(--muted); margin-top: 8px; min-height: 1.2em;
+    }
+    .status-line.ok   { color: var(--green); }
+    .status-line.err  { color: #f87171; }
+
+    .summary-bar {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      background: var(--surface2); border-radius: 10px; padding: 14px 18px;
+      border: 1px solid var(--border); font-size: .82rem;
+    }
+    .summary-item { display: flex; align-items: center; gap: 6px; }
+    .summary-item .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .summary-item .dot.done { background: var(--green); }
+
+    @media(max-width: 640px) {
+      .params-grid { grid-template-columns: 1fr; }
+      .script-grid { grid-template-columns: 1fr; }
+      .studio-layout { padding: 16px 12px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="paw">🎬</div>
+  <div>
+    <h1>Harold's Production Studio</h1>
+    <p>Generate fully synthetic call videos for social media</p>
+  </div>
+  <a class="nav-link" href="/dashboard">← Back to Dashboard</a>
+</header>
+
+<div class="studio-layout">
+
+  <!-- Progress summary -->
+  <div class="summary-bar" id="progress-bar">
+    <div class="summary-item"><div class="dot" id="dot-script"></div>Script</div>
+    <div class="summary-item"><div class="dot" id="dot-caller-audio"></div>Caller Audio</div>
+    <div class="summary-item"><div class="dot" id="dot-harold-audio"></div>Harold Audio</div>
+    <div class="summary-item"><div class="dot" id="dot-image"></div>Photo</div>
+    <div class="summary-item"><div class="dot" id="dot-video"></div>Video</div>
+  </div>
+
+  <!-- Step 1: Parameters & Script -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-1">1</div>
+      <h2>Set Parameters &amp; Generate Script</h2>
+    </div>
+    <div class="params-grid">
+      <div class="param-group">
+        <label>Call Type</label>
+        <select id="call-type">
+          <option value="emergency">🆘 Cat Emergency</option>
+          <option value="complaint">😤 Complaint About Cat</option>
+          <option value="confession" selected>🤫 Confession to Harold</option>
+          <option value="advice">🎓 Life Advice Request</option>
+          <option value="wellness">💚 Wellness Check</option>
+          <option value="tribute">🏆 Tribute to Harold</option>
+          <option value="question">❓ Random Question</option>
+          <option value="meandering">💬 Rambling Nowhere Call</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label>Caller Persona</label>
+        <select id="caller-persona">
+          <option value="panicked">😰 Panicked Pet Parent</option>
+          <option value="grumpy">😾 Grumpy Cat Person</option>
+          <option value="confused" selected>😕 Sweet Confused Caller</option>
+          <option value="dramatic">😱 Dramatic Millennial</option>
+          <option value="sincere">🥺 Sincere &amp; Earnest</option>
+          <option value="deadpan">😐 Deadpan &amp; Dry</option>
+          <option value="enthusiastic">🤩 Overwhelmingly Upbeat</option>
+        </select>
+      </div>
+      <div class="param-group">
+        <label>Mood</label>
+        <select id="mood">
+          <option value="funny" selected>😂 Absurd / Comedic</option>
+          <option value="urgent">😤 Urgent &amp; Frantic</option>
+          <option value="calm">😌 Calm &amp; Sincere</option>
+          <option value="emotional">😢 Emotional</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:18px">
+      <div class="btn-row">
+        <button class="action-btn" id="btn-generate-script" onclick="generateScript()">✨ Generate Script</button>
+        <button class="action-btn secondary" id="btn-regen-script" style="display:none" onclick="generateScript()">↻ Regenerate</button>
+      </div>
+      <div class="script-grid" id="script-area" style="display:none">
+        <div class="script-block">
+          <label>Caller Script</label>
+          <textarea id="caller-script" rows="6" placeholder="Caller's words will appear here…"></textarea>
+        </div>
+        <div class="script-block">
+          <label>Harold's Response</label>
+          <textarea id="harold-response" rows="6" placeholder="Harold's response will appear here…"></textarea>
+        </div>
+      </div>
+      <div class="status-line" id="status-script"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Caller Voice -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-2">2</div>
+      <h2>Caller Voice</h2>
+      <span class="badge" id="badge-voices">Loading voices…</span>
+    </div>
+    <div class="voice-row">
+      <select id="caller-voice-select">
+        <option value="">— select a voice —</option>
+      </select>
+      <button class="action-btn" id="btn-gen-caller" onclick="generateCallerAudio()" disabled>🎙 Generate</button>
+      <button class="action-btn secondary" id="btn-regen-caller" style="display:none" onclick="generateCallerAudio()">↻ Redo</button>
+    </div>
+    <div class="audio-player-wrap" id="caller-audio-wrap" style="display:none">
+      <audio id="caller-audio-player" controls></audio>
+    </div>
+    <div class="status-line" id="status-caller-audio"></div>
+  </div>
+
+  <!-- Step 3: Harold Audio -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-3">3</div>
+      <h2>Harold's Audio</h2>
+    </div>
+    <div class="btn-row">
+      <button class="action-btn" id="btn-gen-harold" onclick="generateHaroldAudio()" disabled>🎙 Generate</button>
+      <button class="action-btn secondary" id="btn-regen-harold" style="display:none" onclick="generateHaroldAudio()">↻ Redo</button>
+    </div>
+    <div class="audio-player-wrap" id="harold-audio-wrap" style="display:none">
+      <audio id="harold-audio-player" controls></audio>
+    </div>
+    <div class="status-line" id="status-harold-audio"></div>
+  </div>
+
+  <!-- Step 4: Harold Photo -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-4">4</div>
+      <h2>Harold's Photo</h2>
+    </div>
+    <div class="btn-row">
+      <button class="action-btn" id="btn-gen-image" onclick="generateImage()" disabled>🖼 Generate Photo</button>
+      <button class="action-btn secondary" id="btn-regen-image" style="display:none" onclick="generateImage()">↻ Regenerate</button>
+    </div>
+    <div class="image-preview" id="image-preview"></div>
+    <div class="status-line" id="status-image"></div>
+  </div>
+
+  <!-- Step 5: Export -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-5">5</div>
+      <h2>Generate Video</h2>
+    </div>
+    <div class="btn-row">
+      <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
+    </div>
+    <div class="status-line" id="status-video"></div>
+  </div>
+
+</div>
+
+<script>
+  // -- Auth helper ---------------------------------------------------------------
+  function getAdminCreds() {
+    const stored = sessionStorage.getItem('adminCreds');
+    if (stored) return stored;
+    const pass = prompt('Enter admin password:');
+    if (!pass) return null;
+    const creds = btoa(`:${pass}`);
+    sessionStorage.setItem('adminCreds', creds);
+    return creds;
+  }
+
+  async function adminFetch(url, opts = {}) {
+    const creds = getAdminCreds();
+    if (!creds) return null;
+    return fetch(url, {
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: `Basic ${creds}` },
+    });
+  }
+
+  // -- State ---------------------------------------------------------------------
+  const state = {
+    callerScript:    null,
+    haroldResponse:  null,
+    scene:           null,
+    callerAudioData: null,
+    haroldAudioData: null,
+    imageData:       null,
+  };
+
+  function dot(id, done) {
+    document.getElementById(`dot-${id}`).classList.toggle('done', done);
+  }
+
+  // -- Load voices on page load --------------------------------------------------
+  async function loadVoices() {
+    const badge = document.getElementById('badge-voices');
+    const sel   = document.getElementById('caller-voice-select');
+    const res   = await adminFetch('/studio/api/voices');
+    if (!res || !res.ok) { badge.textContent = 'Could not load voices'; return; }
+    const { voices } = await res.json();
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      const desc = [v.labels.gender, v.labels.age, v.labels.accent].filter(Boolean).join(', ');
+      opt.textContent = desc ? `${v.name} (${desc})` : v.name;
+      sel.appendChild(opt);
+    });
+    badge.textContent = `${voices.length} voices`;
+    sel.addEventListener('change', () => {
+      document.getElementById('btn-gen-caller').disabled = !sel.value || !state.callerScript;
+    });
+  }
+
+  // -- Step 1: Generate script ---------------------------------------------------
+  async function generateScript() {
+    const btn = document.getElementById('btn-generate-script');
+    const status = document.getElementById('status-script');
+    btn.disabled = true; btn.textContent = '✨ Generating…';
+    status.textContent = '';
+    status.className = 'status-line';
+
+    const body = {
+      callType:      document.getElementById('call-type').value,
+      callerPersona: document.getElementById('caller-persona').value,
+      mood:          document.getElementById('mood').value,
+    };
+
+    const res = await adminFetch('/studio/api/generate-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    btn.disabled = false; btn.textContent = '✨ Generate Script';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed to generate script.';
+      status.className = 'status-line err';
+      return;
+    }
+
+    const data = await res.json();
+    state.callerScript   = data.callerScript;
+    state.haroldResponse = data.haroldResponse;
+    state.scene          = data.scene;
+
+    document.getElementById('caller-script').value   = data.callerScript;
+    document.getElementById('harold-response').value = data.haroldResponse;
+    document.getElementById('script-area').style.display = 'grid';
+    document.getElementById('btn-regen-script').style.display = 'inline-flex';
+
+    dot('script', true);
+    updateGenerateButtons();
+    status.textContent = '✓ Script generated — edit either field as you like.';
+    status.className = 'status-line ok';
+  }
+
+  // Keep state in sync with manual edits
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('caller-script').addEventListener('input', e => {
+      state.callerScript = e.target.value;
+      updateGenerateButtons();
+    });
+    document.getElementById('harold-response').addEventListener('input', e => {
+      state.haroldResponse = e.target.value;
+      updateGenerateButtons();
+    });
+  });
+
+  function updateGenerateButtons() {
+    const hasScript  = !!(state.callerScript?.trim());
+    const hasHarold  = !!(state.haroldResponse?.trim());
+    const hasVoice   = !!document.getElementById('caller-voice-select').value;
+
+    document.getElementById('btn-gen-caller').disabled  = !(hasScript && hasVoice);
+    document.getElementById('btn-gen-harold').disabled  = !hasHarold;
+    document.getElementById('btn-gen-image').disabled   = !hasHarold;
+    checkVideoReady();
+  }
+
+  function checkVideoReady() {
+    const ready = !!(state.callerAudioData && state.haroldAudioData && state.imageData);
+    document.getElementById('btn-gen-video').disabled = !ready;
+  }
+
+  // -- Step 2: Caller audio ------------------------------------------------------
+  async function generateCallerAudio() {
+    const voiceId = document.getElementById('caller-voice-select').value;
+    const text    = document.getElementById('caller-script').value.trim();
+    if (!voiceId || !text) return;
+
+    const btn    = document.getElementById('btn-gen-caller');
+    const status = document.getElementById('status-caller-audio');
+    btn.disabled = true; btn.textContent = '🎙 Generating…';
+    status.textContent = ''; status.className = 'status-line';
+
+    const res = await adminFetch('/studio/api/generate-caller-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voiceId, text }),
+    });
+    btn.disabled = false; btn.textContent = '🎙 Generate';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed.'; status.className = 'status-line err';
+      return;
+    }
+
+    const buffer = await res.arrayBuffer();
+    const blob   = new Blob([buffer], { type: 'audio/mpeg' });
+    const url    = URL.createObjectURL(blob);
+
+    // Store as base64 for video generation
+    const reader = new FileReader();
+    reader.onload = () => { state.callerAudioData = reader.result; checkVideoReady(); };
+    reader.readAsDataURL(blob);
+
+    document.getElementById('caller-audio-player').src = url;
+    document.getElementById('caller-audio-wrap').style.display = 'block';
+    document.getElementById('btn-regen-caller').style.display = 'inline-flex';
+    dot('caller-audio', true);
+    status.textContent = '✓ Caller audio ready'; status.className = 'status-line ok';
+  }
+
+  // -- Step 3: Harold audio ------------------------------------------------------
+  async function generateHaroldAudio() {
+    const text = document.getElementById('harold-response').value.trim();
+    if (!text) return;
+
+    const btn    = document.getElementById('btn-gen-harold');
+    const status = document.getElementById('status-harold-audio');
+    btn.disabled = true; btn.textContent = '🎙 Generating…';
+    status.textContent = ''; status.className = 'status-line';
+
+    const res = await adminFetch('/studio/api/generate-harold-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    btn.disabled = false; btn.textContent = '🎙 Generate';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed.'; status.className = 'status-line err';
+      return;
+    }
+
+    const buffer = await res.arrayBuffer();
+    const blob   = new Blob([buffer], { type: 'audio/mpeg' });
+    const url    = URL.createObjectURL(blob);
+
+    const reader = new FileReader();
+    reader.onload = () => { state.haroldAudioData = reader.result; checkVideoReady(); };
+    reader.readAsDataURL(blob);
+
+    document.getElementById('harold-audio-player').src = url;
+    document.getElementById('harold-audio-wrap').style.display = 'block';
+    document.getElementById('btn-regen-harold').style.display = 'inline-flex';
+    dot('harold-audio', true);
+    status.textContent = '✓ Harold audio ready'; status.className = 'status-line ok';
+  }
+
+  // -- Step 4: Image -------------------------------------------------------------
+  async function generateImage() {
+    const haroldResponse = document.getElementById('harold-response').value.trim();
+    if (!haroldResponse) return;
+
+    const btn    = document.getElementById('btn-gen-image');
+    const status = document.getElementById('status-image');
+    btn.disabled = true; btn.textContent = '🖼 Generating…';
+    status.textContent = ''; status.className = 'status-line';
+
+    const res = await adminFetch('/studio/api/generate-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ haroldResponse, scene: state.scene }),
+    });
+    btn.disabled = false; btn.textContent = '🖼 Generate Photo';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed.'; status.className = 'status-line err';
+      return;
+    }
+
+    const { image, scene } = await res.json();
+    state.imageData = image;
+    state.scene     = scene;
+
+    document.getElementById('image-preview').innerHTML =
+      `<img src="${image}" alt="Harold photo" /><div class="scene-label">${escapeHtml(scene)}</div>`;
+    document.getElementById('btn-regen-image').style.display = 'inline-flex';
+    dot('image', true);
+    checkVideoReady();
+    status.textContent = '✓ Photo generated'; status.className = 'status-line ok';
+  }
+
+  // -- Step 5: Video -------------------------------------------------------------
+  async function generateVideo() {
+    if (!state.callerAudioData || !state.haroldAudioData || !state.imageData) return;
+
+    const btn    = document.getElementById('btn-gen-video');
+    const status = document.getElementById('status-video');
+    btn.disabled = true; btn.textContent = '🎬 Generating…';
+    status.textContent = 'Assembling video — this takes about 20 seconds…'; status.className = 'status-line';
+
+    const res = await adminFetch('/studio/api/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageData:       state.imageData,
+        callerAudioData: state.callerAudioData,
+        haroldAudioData: state.haroldAudioData,
+        callerText:      document.getElementById('caller-script').value.trim(),
+        haroldText:      document.getElementById('harold-response').value.trim(),
+      }),
+    });
+    btn.disabled = false; btn.textContent = '🎬 Generate & Download';
+
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed to generate video.'; status.className = 'status-line err';
+      return;
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
+    URL.revokeObjectURL(url);
+
+    dot('video', true);
+    status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadVoices();
+</script>
+</body>
+</html>

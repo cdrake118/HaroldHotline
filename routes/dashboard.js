@@ -16,12 +16,12 @@ const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBx
 
 const router = express.Router();
 
-// ── Dashboard page ────────────────────────────────────────────────────────────
+// -- Dashboard page ------------------------------------------------------------
 router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'dashboard.html'));
 });
 
-// ── Diagnostics ──────────────────────────────────────────────────────────────
+// -- Diagnostics --------------------------------------------------------------
 router.get('/api/debug', (req, res) => {
   const audioDir = process.env.AUDIO_DIR || path.join(__dirname, '..', 'public', 'audio');
   let audioFiles = [];
@@ -48,7 +48,7 @@ router.get('/api/debug', (req, res) => {
   });
 });
 
-// ── Admin auth ────────────────────────────────────────────────────────────────
+// -- Admin auth ----------------------------------------------------------------
 function adminAuth(req, res, next) {
   const password = process.env.ADMIN_PASSWORD;
   if (!password) return next();
@@ -64,7 +64,7 @@ function adminAuth(req, res, next) {
   res.status(401).json({ error: 'Authentication required' });
 }
 
-// ── REST API ──────────────────────────────────────────────────────────────────
+// -- REST API ------------------------------------------------------------------
 
 router.get('/api/stats', (req, res) => {
   res.json(db.stats());
@@ -133,7 +133,7 @@ router.get('/api/calls/:id/recording', async (req, res) => {
   }
 });
 
-// ── Blocklist ─────────────────────────────────────────────────────────────────
+// -- Blocklist -----------------------------------------------------------------
 
 router.get('/api/blocklist', adminAuth, (req, res) => {
   res.json(db.listBlocklist());
@@ -151,7 +151,7 @@ router.delete('/api/blocklist/:id', adminAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// -- Settings ------------------------------------------------------------------
 
 router.get('/api/settings', adminAuth, (req, res) => {
   res.json({
@@ -167,14 +167,14 @@ router.patch('/api/settings', adminAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ── Rate-limited callers ──────────────────────────────────────────────────────
+// -- Rate-limited callers ------------------------------------------------------
 
 router.get('/api/rate-limited', adminAuth, (req, res) => {
   const limit = parseInt(db.getSetting('rate_limit') || '20', 10);
   res.json(db.getRateLimitedCallers(limit));
 });
 
-// ── Wisdom pool ───────────────────────────────────────────────────────────────
+// -- Wisdom pool ---------------------------------------------------------------
 
 router.get('/api/wisdoms/count', (req, res) => {
   res.json({ count: db.getWisdomCount() });
@@ -218,7 +218,7 @@ router.post('/api/wisdoms/generate', adminAuth, async (req, res) => {
   }
 });
 
-// ── Social content pipeline ───────────────────────────────────────────────────
+// -- Social content pipeline ---------------------------------------------------
 
 // Step 1 — Harold's third-person response text
 router.post('/api/calls/:id/generate-response', adminAuth, async (req, res) => {
@@ -335,54 +335,131 @@ function wrapText(text, maxChars = 36) {
   return lines;
 }
 
+// -- List ElevenLabs voices (for caller voice picker) -------------------------
+router.get('/api/voices', adminAuth, async (req, res) => {
+  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  try {
+    const voicesRes = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
+    });
+    if (!voicesRes.ok) throw new Error(`ElevenLabs voices error: ${voicesRes.status}`);
+    const { voices } = await voicesRes.json();
+    const filtered = voices
+      .filter(v => v.category === 'premade' && v.voice_id !== ELEVENLABS_VOICE_ID)
+      .map(v => ({ id: v.voice_id, name: v.name, labels: v.labels || {} }));
+    res.json({ voices: filtered });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -- Generate AI-voiced caller audio ------------------------------------------
+router.post('/api/calls/:id/generate-caller-audio', adminAuth, async (req, res) => {
+  if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  const { voiceId, text } = req.body;
+  if (!voiceId || !text) return res.status(400).json({ error: 'voiceId and text are required' });
+  try {
+    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+    });
+    if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
+    const buffer = await ttsRes.buffer();
+    res.set('Content-Type', 'audio/mpeg');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/calls/:id/generate-video', adminAuth, async (req, res) => {
   if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
   const call = db.getCallById(parseInt(req.params.id, 10));
   if (!call) return res.status(404).json({ error: 'Not found' });
 
-  const { imageData, responseText } = req.body;
+  const { imageData, responseText, callerAudioData, callerText, useRecording } = req.body;
   if (!imageData || !responseText) return res.status(400).json({ error: 'imageData and responseText are required' });
 
   const uid = crypto.randomUUID();
-  const tmpImg = path.join(os.tmpdir(), `harold-${uid}.jpg`);
-  const tmpAud = path.join(os.tmpdir(), `harold-${uid}.mp3`);
-  const tmpVid = path.join(os.tmpdir(), `harold-${uid}.mp4`);
+  const tmpImg      = path.join(os.tmpdir(), `harold-${uid}.jpg`);
+  const tmpAud      = path.join(os.tmpdir(), `harold-${uid}.mp3`);
+  const tmpVid      = path.join(os.tmpdir(), `harold-${uid}.mp4`);
+  const tmpCaller   = path.join(os.tmpdir(), `caller-${uid}.mp3`);
+  const tmpCombined = path.join(os.tmpdir(), `combined-${uid}.mp3`);
+  const hasCallerAudio = !!(callerAudioData || (useRecording && call.recording_sid));
 
   try {
-    // Save image
-    const imgBuffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-    fs.writeFileSync(tmpImg, imgBuffer);
+    fs.writeFileSync(tmpImg, Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
 
-    // ElevenLabs TTS
+    // Optionally fetch/save caller audio
+    if (hasCallerAudio) {
+      if (callerAudioData) {
+        fs.writeFileSync(tmpCaller, Buffer.from(callerAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
+      } else {
+        const recUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Recordings/${call.recording_sid}.mp3`;
+        const creds  = Buffer.from(`${config.accountSid}:${config.authToken}`).toString('base64');
+        const recRes = await fetch(recUrl, { headers: { Authorization: `Basic ${creds}` } });
+        if (!recRes.ok) throw new Error(`Failed to fetch recording: ${recRes.status}`);
+        fs.writeFileSync(tmpCaller, await recRes.buffer());
+      }
+    }
+
+    // Harold TTS
     const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
       method: 'POST',
       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: responseText,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
+      body: JSON.stringify({ text: responseText, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
     });
     if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
     fs.writeFileSync(tmpAud, await ttsRes.buffer());
 
-    // Build ffmpeg caption overlay
-    const lines = wrapText(`"${responseText}"`);
-    const lineH = 52;
-    const totalH = lines.length * lineH + 30;
-    const textFilters = lines.map((line, i) => {
-      const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "’").replace(/:/g, '\\:');
-      const y    = `h-${totalH - i * lineH}`;
-      return `drawtext=text='${safe}':x=(w-text_w)/2:y=${y}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
-    }).join(',');
+    let audioFile = tmpAud;
+    let callerDur  = 0;
 
-    const watermark = `drawtext=text="Harold’s Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
+    if (hasCallerAudio) {
+      const { stdout } = await execFileAsync('ffprobe', [
+        '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller,
+      ]);
+      callerDur = parseFloat(stdout.trim()) || 0;
+      await execFileAsync('ffmpeg', [
+        '-i', tmpCaller, '-i', tmpAud,
+        '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpCombined,
+      ]);
+      audioFile = tmpCombined;
+    }
 
-    const vf = `scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,${watermark},${textFilters}`;
+    const watermark = `drawtext=text="Harold's Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
+
+    let captionFilters;
+    if (hasCallerAudio && callerDur > 0 && callerText) {
+      const cLines  = wrapText(callerText.slice(0, 180));
+      const hLines  = wrapText(`"${responseText}"`);
+      const cTotalH = cLines.length * 52 + 30;
+      const hTotalH = hLines.length * 52 + 30;
+      const callerFilters = cLines.map((line, i) => {
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${cTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,0,${callerDur})'`;
+      });
+      const haroldFilters = hLines.map((line, i) => {
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${hTotalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='gte(t,${callerDur})'`;
+      });
+      captionFilters = [...callerFilters, ...haroldFilters].join(',');
+    } else {
+      const lines   = wrapText(`"${responseText}"`);
+      const totalH  = lines.length * 52 + 30;
+      captionFilters = lines.map((line, i) => {
+        const safe = line.replace(/\\/g, '\\\\').replace(/'/g, "'").replace(/:/g, '\\:');
+        return `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${totalH - i * 52}:fontsize=40:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
+      }).join(',');
+    }
+
+    const vf = `scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,${watermark},${captionFilters}`;
 
     await execFileAsync('ffmpeg', [
-      '-loop', '1', '-i', tmpImg,
-      '-i', tmpAud,
+      '-loop', '1', '-i', tmpImg, '-i', audioFile,
       '-vf', vf,
       '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k',
@@ -397,11 +474,11 @@ router.post('/api/calls/:id/generate-video', adminAuth, async (req, res) => {
     console.error('Generate video error:', err);
     res.status(500).json({ error: err.message || 'Failed to generate video' });
   } finally {
-    [tmpImg, tmpAud, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
+    [tmpImg, tmpAud, tmpVid, tmpCaller, tmpCombined].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
   }
 });
 
-// ── Voiceover generator ───────────────────────────────────────────────────────
+// -- Voiceover generator -------------------------------------------------------
 router.post('/api/voiceover', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({ error: 'OPENAI_API_KEY is not configured' });
@@ -427,7 +504,7 @@ router.post('/api/voiceover', adminAuth, async (req, res) => {
   }
 });
 
-// ── Generate social post ──────────────────────────────────────────────────────
+// -- Generate social post ------------------------------------------------------
 const TYPE_LABELS = {
   confession: 'confession',
   question:   'advice request',
@@ -467,7 +544,7 @@ router.post('/api/calls/:id/generate-post', adminAuth, async (req, res) => {
   }
 });
 
-// ── Admin actions ─────────────────────────────────────────────────────────────
+// -- Admin actions -------------------------------------------------------------
 
 router.patch('/api/calls/:id/flag', adminAuth, (req, res) => {
   const call = db.getCallById(parseInt(req.params.id, 10));
