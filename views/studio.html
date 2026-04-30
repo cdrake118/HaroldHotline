@@ -241,6 +241,30 @@
       border: 1px solid var(--border); display: block;
     }
 
+    .mode-toggle {
+      display: flex; gap: 6px; padding: 5px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; align-self: center; margin-bottom: -6px;
+    }
+    .mode-btn {
+      background: transparent; color: var(--muted); border: none;
+      padding: 7px 18px; border-radius: 7px; font-family: inherit;
+      font-size: .85rem; font-weight: 600; cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.active { background: var(--amber); color: #000; }
+
+    .wisdom-picker-row {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .wisdom-picker-row select {
+      flex: 1; min-width: 220px; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: .5rem .65rem; font-size: .88rem; font-family: inherit;
+    }
+    .wisdom-picker-row select:focus { outline: none; border-color: var(--amber); }
+
     .history-modal {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
       z-index: 100; overflow-y: auto; padding: 40px 20px;
@@ -294,10 +318,16 @@
     <p class="call-ref-transcript" id="call-ref-transcript"></p>
   </div>
 
+  <!-- Mode toggle (hidden in real-call mode — that mode is set by ?callId=N) -->
+  <div class="mode-toggle" id="mode-toggle">
+    <button class="mode-btn active" data-mode="synthetic" onclick="setMode('synthetic')">📞 Synthetic Call</button>
+    <button class="mode-btn" data-mode="wisdom" onclick="setMode('wisdom')">📜 Wisdom Reading</button>
+  </div>
+
   <!-- Progress summary -->
   <div class="summary-bar" id="progress-bar">
-    <div class="summary-item"><div class="dot" id="dot-script"></div>Script</div>
-    <div class="summary-item"><div class="dot" id="dot-caller-audio"></div>Caller Audio</div>
+    <div class="summary-item" id="summary-script"><div class="dot" id="dot-script"></div>Script</div>
+    <div class="summary-item" id="summary-caller-audio"><div class="dot" id="dot-caller-audio"></div>Caller Audio</div>
     <div class="summary-item"><div class="dot" id="dot-harold-audio"></div>Harold Audio</div>
     <div class="summary-item"><div class="dot" id="dot-image"></div>Photo</div>
     <div class="summary-item"><div class="dot" id="dot-video"></div>Video</div>
@@ -309,8 +339,24 @@
   <div class="step-card">
     <div class="step-header">
       <div class="step-num" id="num-1">1</div>
-      <h2>Set Parameters &amp; Generate Script</h2>
+      <h2 id="step1-title">Set Parameters &amp; Generate Script</h2>
     </div>
+
+    <!-- Wisdom-mode picker (hidden by default; setMode('wisdom') reveals it) -->
+    <div id="wisdom-picker" style="display:none">
+      <div class="wisdom-picker-row">
+        <select id="wisdom-select" onchange="pickWisdomFromList(this.value)">
+          <option value="">— pick from existing wisdoms —</option>
+        </select>
+        <button class="action-btn" id="btn-gen-wisdom" onclick="generateNewWisdom()">✨ Generate New</button>
+        <button class="action-btn secondary" onclick="rerollWisdomIntro()">🔀 New Intro</button>
+      </div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:5px">Spoken text (intro + wisdom — fully editable)</div>
+      <div class="status-line" id="status-wisdom"></div>
+    </div>
+
+    <!-- Synthetic-mode controls (hidden in wisdom mode) -->
+    <div id="synthetic-controls">
     <div class="params-grid">
       <div class="param-group">
         <label>Call Type</label>
@@ -351,6 +397,7 @@
       <label>Optional scenario or extra context <span style="color:var(--muted);font-weight:400">(weave a specific story detail into the script)</span></label>
       <textarea id="scenario" rows="2" placeholder="e.g. 'caller's cat brought home a sock and acts proud of it' or paste your own seed idea…"></textarea>
     </div>
+    </div><!-- /#synthetic-controls -->
     <div style="margin-top:18px">
       <div class="btn-row">
         <button class="action-btn" id="btn-generate-script" onclick="generateScript()">✨ Generate Script</button>
@@ -358,12 +405,12 @@
         <button class="action-btn secondary" id="btn-regen-script" style="display:none" onclick="generateScript()">↻ Regenerate</button>
       </div>
       <div class="script-grid" id="script-area" style="display:none">
-        <div class="script-block">
+        <div class="script-block" id="caller-script-block">
           <label>Caller Script</label>
           <textarea id="caller-script" rows="6" placeholder="Caller's words will appear here…"></textarea>
         </div>
         <div class="script-block">
-          <label>Harold's Response</label>
+          <label id="harold-response-label">Harold's Response</label>
           <textarea id="harold-response" rows="6" placeholder="Harold's response will appear here…"></textarea>
         </div>
       </div>
@@ -375,8 +422,8 @@
     </div>
   </div>
 
-  <!-- Step 2: Caller Voice -->
-  <div class="step-card">
+  <!-- Step 2: Caller Voice (hidden in wisdom mode) -->
+  <div class="step-card" id="step-2-card">
     <div class="step-header">
       <div class="step-num" id="num-2">2</div>
       <h2>Caller Voice</h2>
@@ -511,6 +558,7 @@
 
   // -- State ---------------------------------------------------------------------
   const state = {
+    mode:            'synthetic', // 'synthetic' | 'wisdom' | 'real-call'
     callerScript:    null,
     haroldResponse:  null,
     haroldVariations: null,
@@ -521,6 +569,7 @@
     useRecording:    false,
     callContext:     null,
     postText:        null,
+    wisdomText:      null, // raw wisdom (without intro)
     _videoBlobUrl:   null,
   };
 
@@ -529,7 +578,122 @@
     if (activeGenerations > 0) { e.preventDefault(); return (e.returnValue = 'A generation is in progress — leave anyway?'); }
   });
 
-  function isSyntheticMode() { return !state.callContext; }
+  function isSyntheticMode() { return state.mode === 'synthetic'; }
+  function isWisdomMode()    { return state.mode === 'wisdom'; }
+  function isRealCallMode()  { return state.mode === 'real-call'; }
+
+  // Intro phrases for wisdom-reading videos. Picked at random; user can re-roll.
+  const WISDOM_INTROS = [
+    "Today's words of wisdom from Harold:",
+    "Harold thinks you should all know:",
+    "A reminder from Harold:",
+    "Harold has been observing humans, and offers this:",
+    "From Harold's napping desk, today's truth:",
+    "Harold's wisdom for the day:",
+    "Harold offers this insight:",
+    "A truth, from Harold:",
+    "Harold's thought of the day:",
+    "Listen carefully. Harold has spoken:",
+    "Harold has descended from the windowsill to share this:",
+    "Harold paused his nap to deliver this:",
+  ];
+  function pickWisdomIntro() {
+    return WISDOM_INTROS[Math.floor(Math.random() * WISDOM_INTROS.length)];
+  }
+
+  // -- Mode switching ------------------------------------------------------------
+  function setMode(mode) {
+    if (state.mode === mode) return;
+    if (isRealCallMode()) return; // ?callId locks the mode
+    state.mode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    applyModeUI();
+    // Clear the harold-response between modes so we don't carry stale text
+    document.getElementById('harold-response').value = '';
+    state.haroldResponse = null;
+    state.haroldAudioData = null;
+    document.getElementById('harold-audio-wrap').style.display = 'none';
+    dot('harold-audio', false);
+    dot('script', false);
+    updateGenerateButtons();
+  }
+
+  function applyModeUI() {
+    const wisdom = isWisdomMode();
+    document.getElementById('synthetic-controls').style.display = wisdom ? 'none' : '';
+    document.getElementById('wisdom-picker').style.display      = wisdom ? '' : 'none';
+    document.getElementById('btn-generate-script').style.display = wisdom ? 'none' : (isRealCallMode() ? 'none' : 'inline-flex');
+    document.getElementById('step-2-card').style.display        = wisdom ? 'none' : '';
+    document.getElementById('summary-caller-audio').style.display = wisdom ? 'none' : '';
+    document.getElementById('caller-script-block').style.display = wisdom ? 'none' : '';
+    document.getElementById('script-area').style.display         = wisdom ? 'grid' : (state.callerScript || state.haroldResponse ? 'grid' : 'none');
+    document.getElementById('script-area').style.gridTemplateColumns = wisdom ? '1fr' : '1fr 1fr';
+    document.getElementById('harold-response-label').textContent = wisdom ? 'Spoken Text (intro + wisdom)' : "Harold's Response";
+    document.getElementById('step1-title').textContent           = wisdom ? 'Pick or Generate a Wisdom' : 'Set Parameters & Generate Script';
+    document.getElementById('studio-subtitle').textContent       = wisdom ? "Building a wisdom reading video" : (isRealCallMode() ? `Building a video for call #${state.callContext.id}` : 'Generate fully synthetic call videos for social media');
+  }
+
+  // -- Wisdom mode ---------------------------------------------------------------
+  let allWisdoms = [];
+
+  async function loadWisdomList() {
+    const sel = document.getElementById('wisdom-select');
+    const res = await adminFetch('/studio/api/wisdoms');
+    if (!res || !res.ok) return;
+    const { wisdoms } = await res.json();
+    allWisdoms = wisdoms || [];
+    sel.innerHTML = '<option value="">— pick from existing wisdoms —</option>' +
+      allWisdoms.map(w => `<option value="${w.id}">${escapeHtml(w.text.slice(0, 80))}${w.text.length > 80 ? '…' : ''}</option>`).join('');
+  }
+
+  function pickWisdomFromList(id) {
+    if (!id) return;
+    const w = allWisdoms.find(x => String(x.id) === String(id));
+    if (!w) return;
+    state.wisdomText = w.text;
+    const intro = pickWisdomIntro();
+    document.getElementById('harold-response').value = `${intro} ${w.text}`;
+    state.haroldResponse = document.getElementById('harold-response').value;
+    document.getElementById('script-area').style.display = 'grid';
+    dot('script', true);
+    updateGenerateButtons();
+    const status = document.getElementById('status-wisdom');
+    status.textContent = '✓ Wisdom loaded — edit as needed.'; status.className = 'status-line ok';
+  }
+
+  async function generateNewWisdom() {
+    const btn    = document.getElementById('btn-gen-wisdom');
+    const status = document.getElementById('status-wisdom');
+    btn.disabled = true; btn.textContent = '✨ Generating…';
+    status.textContent = ''; status.className = 'status-line';
+    const res = await adminFetch('/studio/api/generate-wisdom', { method: 'POST' });
+    btn.disabled = false; btn.textContent = '✨ Generate New';
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      status.textContent = e?.error || 'Failed to generate wisdom.'; status.className = 'status-line err';
+      return;
+    }
+    const { wisdom } = await res.json();
+    state.wisdomText = wisdom;
+    const intro = pickWisdomIntro();
+    document.getElementById('harold-response').value = `${intro} ${wisdom}`;
+    state.haroldResponse = document.getElementById('harold-response').value;
+    document.getElementById('script-area').style.display = 'grid';
+    dot('script', true);
+    updateGenerateButtons();
+    status.textContent = '✓ New wisdom generated and saved to the pool.'; status.className = 'status-line ok';
+    // Refresh the dropdown so the new wisdom appears
+    loadWisdomList().catch(() => {});
+  }
+
+  function rerollWisdomIntro() {
+    if (!state.wisdomText) return;
+    const intro = pickWisdomIntro();
+    document.getElementById('harold-response').value = `${intro} ${state.wisdomText}`;
+    state.haroldResponse = document.getElementById('harold-response').value;
+  }
 
   function dot(id, done) {
     document.getElementById(`dot-${id}`).classList.toggle('done', done);
@@ -698,12 +862,12 @@
   }
 
   function checkVideoReady() {
-    // Caller audio is required when caller is voiced (AI) OR when using real recording.
-    // For studio synthetic-only with no caller, allow Harold-only video.
     const haveCallerAudio = !!state.callerAudioData || (state.useRecording && state.callContext?.id);
-    const ready = !!(state.haroldAudioData && state.imageData) && (isSyntheticMode() ? haveCallerAudio : (haveCallerAudio || true));
-    // For real-call mode, caller audio is still required (per UX); allow Harold-only only if user explicitly skips.
-    document.getElementById('btn-gen-video').disabled = !(state.haroldAudioData && state.imageData && haveCallerAudio);
+    // Wisdom mode is Harold-solo, so caller audio is not required at all.
+    const ready = isWisdomMode()
+      ? !!(state.haroldAudioData && state.imageData)
+      : !!(state.haroldAudioData && state.imageData && haveCallerAudio);
+    document.getElementById('btn-gen-video').disabled = !ready;
   }
 
   // -- Step 2: Caller audio ------------------------------------------------------
@@ -1073,7 +1237,7 @@
     btn.disabled = true; btn.textContent = '✍️ Generating…';
     status.textContent = ''; status.className = 'status-line';
 
-    const callType = state.callContext?.call_type || document.getElementById('call-type').value;
+    const callType = isWisdomMode() ? 'wisdom' : (state.callContext?.call_type || document.getElementById('call-type').value);
 
     const res = await adminFetch('/studio/api/generate-post', {
       method: 'POST',
@@ -1160,17 +1324,26 @@
     const btn = document.getElementById('btn-auto');
     btn.disabled = true; btn.textContent = '⚡ Running…';
     try {
-      // 1. Script (only if we don't already have one)
+      // 1. Script (only if we don't already have one). Mode-aware:
+      //    synthetic → full call script; real-call → harold response from transcript;
+      //    wisdom    → pick a random wisdom and prepend a random intro.
       if (!state.haroldResponse?.trim()) {
-        if (isSyntheticMode()) {
+        if (isWisdomMode()) {
+          if (!allWisdoms.length) await loadWisdomList();
+          if (allWisdoms.length) {
+            const w = allWisdoms[Math.floor(Math.random() * allWisdoms.length)];
+            pickWisdomFromList(w.id);
+          } else {
+            await generateNewWisdom();
+          }
+        } else if (isSyntheticMode()) {
           await generateScript();
         } else {
           await generateHaroldResponse();
         }
       }
-      // Pick a caller voice that fits the persona (and avoids the last 5 used).
-      // Skipped in real-call mode where we use the actual Twilio recording.
-      if (!state.callerAudioData && !state.useRecording) {
+      // Caller audio: skipped entirely in wisdom mode (Harold-solo video).
+      if (!isWisdomMode() && !state.callerAudioData && !state.useRecording) {
         const persona = document.getElementById('caller-persona').value;
         const voiceId = pickRandomVoice(persona);
         if (voiceId) {
@@ -1179,9 +1352,9 @@
           sel.dispatchEvent(new Event('change'));
         }
       }
-      // 2+3. Caller and Harold audio in parallel
+      // 2+3. Caller and Harold audio in parallel (caller skipped in wisdom mode)
       await Promise.all([
-        (!state.callerAudioData && !state.useRecording && document.getElementById('caller-voice-select').value)
+        (!isWisdomMode() && !state.callerAudioData && !state.useRecording && document.getElementById('caller-voice-select').value)
           ? generateCallerAudio() : Promise.resolve(),
         !state.haroldAudioData ? generateHaroldAudio() : Promise.resolve(),
       ]);
@@ -1211,6 +1384,8 @@
     if (!res || !res.ok) return;
     const { call } = await res.json();
     state.callContext = call;
+    state.mode = 'real-call';
+    document.getElementById('mode-toggle').style.display = 'none';
 
     // Show call-reference card
     const card = document.getElementById('call-ref-card');
@@ -1410,8 +1585,11 @@
     await loadCallContext();
     loadDraft();
     applyPendingVoice();
-    // Load gallery in the background — gallery-first is the default for image step
+    // Apply initial mode UI (so wisdom-only elements are hidden in default synthetic mode)
+    applyModeUI();
+    // Load gallery + wisdom list in the background
     loadGallery().catch(() => {});
+    loadWisdomList().catch(() => {});
   })();
 </script>
 </body>

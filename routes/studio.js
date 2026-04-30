@@ -154,6 +154,47 @@ router.get('/api/call/:id', adminAuth, (req, res) => {
   res.json({ call: { id, caller_number, call_type, created_at, transcript, wisdom_text, harold_response, hasRecording: !!recording_url, recording_sid } });
 });
 
+// ── List wisdoms for the studio's wisdom-video mode ──────────────────────────
+router.get('/api/wisdoms', adminAuth, (req, res) => {
+  try {
+    res.json({ wisdoms: db.listWisdoms(500) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Generate a single new wisdom (and persist it to the pool) ─────────────────
+router.post('/api/generate-wisdom', adminAuth, async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content:
+          `Generate ONE unique piece of cat wisdom from Harold, a confident and mildly judgmental tabby cat dispensing life advice to humans. ` +
+          `1-2 sentences. Direct, slightly smug, unexpectedly profound. ` +
+          `Topics: sleep, food, territory, trust, presence, routine, observation, independence, contentment, warmth, patience. ` +
+          `Do NOT use the word "sunbeam" or reference sunbeams. ` +
+          `Return JSON: {"wisdom": "…"}`,
+      }],
+      max_tokens: 150,
+      response_format: { type: 'json_object' },
+    });
+    const parsed = JSON.parse(completion.choices[0].message.content);
+    const text   = (parsed.wisdom || '').trim();
+    if (!text) throw new Error('Model returned an empty wisdom');
+    // Persist to the pool so it shows up in subsequent picks. INSERT OR IGNORE
+    // makes this safe if the wisdom happens to be a duplicate.
+    try { db.insertWisdom(text, 'ai-studio'); } catch (_) {}
+    res.json({ wisdom: text });
+  } catch (err) {
+    console.error('Generate wisdom error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate wisdom' });
+  }
+});
+
 // ── Gallery: list reference & previously generated images ────────────────────
 router.get('/api/gallery', adminAuth, (req, res) => {
   const refs = [];

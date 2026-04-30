@@ -177,6 +177,7 @@ const stmts = {
   // Wisdom pool
   pickWisdom:     db.prepare(`SELECT id, text FROM wisdoms ORDER BY RANDOM() LIMIT 1`),
   getWisdomCount: db.prepare(`SELECT COUNT(*) as count FROM wisdoms`),
+  listWisdoms:    db.prepare(`SELECT id, text, source, created_at FROM wisdoms ORDER BY id DESC LIMIT @limit`),
   insertWisdom:   db.prepare(`INSERT OR IGNORE INTO wisdoms (text, source) VALUES (@text, @source)`),
 };
 
@@ -319,5 +320,6 @@ module.exports = {
   // Wisdom pool
   pickWisdom:     ()             => stmts.pickWisdom.get(),
   getWisdomCount: ()             => stmts.getWisdomCount.get().count,
+  listWisdoms:    (limit = 500)  => stmts.listWisdoms.all({ limit }),
   insertWisdom:   (text, source) => stmts.insertWisdom.run({ text, source }),
 };
