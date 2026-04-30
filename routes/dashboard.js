@@ -225,6 +225,7 @@ router.post('/api/calls/:id/generate-response', adminAuth, async (req, res) => {
     `- If silly content, be wry. If serious, be unexpectedly profound.\n` +
     `- Under 60 words\n` +
     `- No hashtags, emojis, or social media language\n` +
+    `- Do NOT use the word "sunbeam" or reference sunbeams\n` +
     `- Replace any real names with "the caller"`;
 
   try {

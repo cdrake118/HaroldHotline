@@ -206,6 +206,7 @@ router.post('/api/generate-response', adminAuth, async (req, res) => {
     `- Harold judges. He does not comfort or moralize. He is a cat.\n` +
     `- Vary tone: try cutting/judgmental, absurdly deadpan, and unexpectedly profound.\n` +
     `- No hashtags, emojis, or filler.\n` +
+    `- Do NOT use the word "sunbeam" or reference sunbeams.\n` +
     `- Replace any real names with "the caller".`;
 
   try {
@@ -316,7 +317,8 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
     `  "scene": "1-2 sentence description for a realistic photo of a tabby cat matching the mood — natural setting, no props, no text."\n` +
     `}\n\n` +
     `Rules for haroldVariations: EXACTLY 3 items. Each: 1-2 sentences, under 35 words, always third person ("Harold...", never "I"). ` +
-    `Vary tone across the three — e.g. cutting/judgmental, absurdly matter-of-fact, and unexpectedly profound.`;
+    `Vary tone across the three — e.g. cutting/judgmental, absurdly matter-of-fact, and unexpectedly profound. ` +
+    `Do NOT use the word "sunbeam" or reference sunbeams in any variation.`;
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

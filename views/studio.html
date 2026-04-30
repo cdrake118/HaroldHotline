@@ -734,7 +734,9 @@
     const blob   = new Blob([buffer], { type: 'audio/mpeg' });
     const url    = URL.createObjectURL(blob);
 
-    // Store as base64 for video generation
+    // Store as base64 for video generation. Clear useRecording so the AI voice
+    // wins at build time (real-call mode auto-defaults useRecording=true).
+    state.useRecording = false;
     const reader = new FileReader();
     reader.onload = () => { state.callerAudioData = reader.result; checkVideoReady(); };
     reader.readAsDataURL(blob);
@@ -1240,9 +1242,16 @@
     document.getElementById('btn-generate-script').style.display = 'none';
     document.getElementById('btn-gen-harold-resp').style.display = 'inline-flex';
 
-    // Show real-recording option if available
+    // If the imported call has a recording, default to using it. The user can still
+    // override by picking an AI voice + clicking "Generate" in step 2; that flow
+    // sets state.callerAudioData which takes precedence at video-build time.
     if (call.hasRecording) {
       document.getElementById('real-rec-banner').style.display = 'block';
+      state.useRecording = true;
+      const statusEl = document.getElementById('status-caller-audio');
+      statusEl.textContent = '✓ Using real Twilio recording — pick an AI voice below to use one instead';
+      statusEl.className   = 'status-line ok';
+      dot('caller-audio', true);
     }
 
     updateGenerateButtons();
