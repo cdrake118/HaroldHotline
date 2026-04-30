@@ -12,7 +12,6 @@ const config   = require('../config/harold');
 const db       = require('../db');
 const { adminAuth, pageAuth } = require('../middleware/auth');
 
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
 const HAROLD_REFS_DIR     = path.join(__dirname, '..', 'public', 'harold-refs');
 const HAROLD_GALLERY_DIR  = path.join(__dirname, '..', 'public', 'harold-gallery');
 
@@ -131,7 +130,7 @@ router.get('/api/voices', adminAuth, async (req, res) => {
       if (!voicesRes.ok) throw new Error(`ElevenLabs voices error: ${voicesRes.status}`);
       const { voices } = await voicesRes.json();
       voicesCache.voices = voices
-        .filter(v => v.category === 'premade' && v.voice_id !== ELEVENLABS_VOICE_ID)
+        .filter(v => v.category === 'premade' && v.voice_id !== config.elevenlabsHaroldVoiceId)
         .map(v => ({ id: v.voice_id, name: v.name, labels: v.labels || {} }));
       voicesCache.ts = Date.now();
     }
@@ -355,10 +354,10 @@ router.post('/api/generate-harold-audio', adminAuth, async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   try {
-    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.elevenlabsHaroldVoiceId}`, {
       method: 'POST',
       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      body: JSON.stringify({ text, model_id: config.elevenlabsModel, voice_settings: config.elevenlabsHaroldSettings }),
     });
     if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
     const buffer = await ttsRes.buffer();

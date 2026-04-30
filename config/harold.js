@@ -13,6 +13,13 @@ const config = {
   // TTS voice — any Twilio/Polly voice name
   announcerVoice: 'Polly.Brian-Neural',
 
+  // Harold's voice — ElevenLabs.
+  // ALWAYS reference these constants when generating Harold audio. Do not hardcode
+  // an alternate voice id or settings anywhere else; consistency matters for the brand.
+  elevenlabsHaroldVoiceId:  process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ',
+  elevenlabsModel:          'eleven_multilingual_v2',
+  elevenlabsHaroldSettings: { stability: 0.5, similarity_boost: 0.75 },
+
   // Harold's socials
   haroldInstagram: process.env.HAROLD_INSTAGRAM || null,
   haroldTikTok:    process.env.HAROLD_TIKTOK    || null,

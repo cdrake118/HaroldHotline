@@ -13,7 +13,6 @@ const db = require('../db');
 const { adminAuth, pageAuth } = require('../middleware/auth');
 
 const HAROLD_REFS_DIR = path.join(__dirname, '..', 'public', 'harold-refs');
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'iQXyd2UUWDkTxpBxUhzQ';
 
 const router = express.Router();
 
@@ -328,7 +327,7 @@ router.get('/api/voices', adminAuth, async (req, res) => {
     if (!voicesRes.ok) throw new Error(`ElevenLabs voices error: ${voicesRes.status}`);
     const { voices } = await voicesRes.json();
     const filtered = voices
-      .filter(v => v.category === 'premade' && v.voice_id !== ELEVENLABS_VOICE_ID)
+      .filter(v => v.category === 'premade' && v.voice_id !== config.elevenlabsHaroldVoiceId)
       .map(v => ({ id: v.voice_id, name: v.name, labels: v.labels || {} }));
     res.json({ voices: filtered });
   } catch (err) {
@@ -389,10 +388,10 @@ router.post('/api/calls/:id/generate-video', adminAuth, async (req, res) => {
     }
 
     // Harold TTS
-    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.elevenlabsHaroldVoiceId}`, {
       method: 'POST',
       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: responseText, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      body: JSON.stringify({ text: responseText, model_id: config.elevenlabsModel, voice_settings: config.elevenlabsHaroldSettings }),
     });
     if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
     fs.writeFileSync(tmpAud, await ttsRes.buffer());

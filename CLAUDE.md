@@ -33,6 +33,15 @@ These are the failure modes that have actually happened on this codebase. Run th
 - Gallery (`public/harold-refs/` for hand-uploaded refs, `public/harold-gallery/` for saved generated images) is the **default** image source. Generation is a fallback.
 - Auto-generate picks a fresh ElevenLabs voice each run, tracking last 5 used in `localStorage.haroldRecentCallerVoices`.
 - Default video aspect ratio is **9:16**. Captions are phrase-timed via `buildTimedCaptions`.
+- **Harold's voice is fixed.** Always use `config.elevenlabsHaroldVoiceId` and `config.elevenlabsHaroldSettings` from `config/harold.js`. Never hardcode an alternate voice id in any route. The `/api/voices` filter excludes Harold's voice from the caller dropdown.
+
+## ffmpeg drawtext gotchas
+
+ffmpeg's filter graph parser treats bare `'` (ASCII apostrophe) as a strong-quote delimiter, **even inside `"..."`**. Any apostrophe in drawtext text will silently consume everything up to the next `'` in the filter chain, corrupting the whole graph.
+
+Always either:
+- Use the curly apostrophe `’` (U+2019) in literal text — `'Harold’s Hotline'`, not `"Harold's Hotline"`.
+- Use `buildTimedCaptions` for any user-supplied text — it already replaces `'` with U+2019 and escapes `:` and `\`.
 
 ## Things to avoid
 
