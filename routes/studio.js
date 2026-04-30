@@ -133,6 +133,14 @@ function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080)
   }
 
   const filters = [];
+  // Anchor each drawtext to a shared baseline rather than its own bbox-top.
+  // ffmpeg's `y` positions the top-left of the rendered text bounding box, which
+  // is at (baseline - max_glyph_a). max_glyph_a varies per word (e.g. "ace" has
+  // a smaller max ascent than "Type"), so equal y values produce different
+  // baselines → visible vertical jitter between adjacent words. Using
+  // `y = baseline - max_glyph_a` evaluates per-word and pins all baselines to
+  // the same line.
+  const ascent = Math.round(fontSize * 0.82); // typical ascent of an uppercase glyph
   for (const phrase of phrases) {
     const phraseStart = (timeOffset + phrase[0].start).toFixed(3);
     const phraseEnd   = (timeOffset + phrase[phrase.length - 1].end).toFixed(3);
@@ -156,7 +164,10 @@ function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080)
       const widths = lineWords.map(w => Math.max(charPx, w.word.length * charPx));
       const lineWidth = widths.reduce((s, x) => s + x, 0) + (lineWords.length - 1) * spacePx;
       let x = Math.round((W - lineWidth) / 2);
-      const yExpr = `h-${blockH - lineIdx * lineH}`;
+      // Per-line baseline as an offset from the bottom of the video. Each word's
+      // y is then "baseline - max_glyph_a" (evaluated by ffmpeg per drawtext).
+      const baselineFromBottom = blockH - lineIdx * lineH - ascent;
+      const yExpr = `h-${baselineFromBottom}-max_glyph_a`;
       lineWords.forEach((w, idx) => {
         const safe = w.word.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
         const wStart = (timeOffset + w.start).toFixed(3);
