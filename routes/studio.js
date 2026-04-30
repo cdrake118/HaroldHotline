@@ -95,6 +95,84 @@ function buildTimedCaptions(text, startSec, endSec, fontSize = 120) {
   return filters;
 }
 
+// Instagram-style karaoke captions. Given word-level timings, lays out each
+// word at its computed x position and emits two drawtext filters per word:
+//   - white base, visible from the moment the word is first spoken until the
+//     end of the phrase (so already-spoken words remain on screen)
+//   - yellow highlight, visible only during the word's own time window
+// The result is the progressive-reveal-with-highlight look from Reels.
+//
+// timeOffset is how far into the final video this audio segment starts.
+// Word timings from ElevenLabs are relative to the audio file.
+function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080) {
+  if (!Array.isArray(wordTimings) || !wordTimings.length) return [];
+  // Approximate avg sans-serif advance widths; close enough for layout.
+  const charPx    = fontSize * 0.55;
+  const spacePx   = fontSize * 0.30;
+  const lineH     = Math.round(fontSize * 1.3);
+  const padBottom = Math.round(fontSize * 0.6);
+  const borderW   = Math.max(3, Math.round(fontSize * 0.05));
+  const shadowOff = Math.max(2, Math.round(fontSize * 0.03));
+  const maxLineW  = Math.floor(W * 0.92); // leave a bit of side padding
+  const HIGHLIGHT = 'yellow';
+
+  // Group words into phrases of up to ~5 words, breaking on natural pauses.
+  // A "natural pause" = end-of-sentence punctuation or a >0.4s gap to next word.
+  const phrases = [];
+  let cur = [];
+  for (let i = 0; i < wordTimings.length; i++) {
+    cur.push(wordTimings[i]);
+    const w   = wordTimings[i];
+    const nxt = wordTimings[i + 1];
+    const endsSentence = /[.!?]\)?$/.test(w.word);
+    const longGap      = nxt && (nxt.start - w.end) > 0.4;
+    if (cur.length >= 5 || endsSentence || longGap || !nxt) {
+      phrases.push(cur);
+      cur = [];
+    }
+  }
+
+  const filters = [];
+  for (const phrase of phrases) {
+    const phraseStart = (timeOffset + phrase[0].start).toFixed(3);
+    const phraseEnd   = (timeOffset + phrase[phrase.length - 1].end).toFixed(3);
+
+    // Greedy word-wrap into lines that fit maxLineW.
+    const lines = [];
+    let line = [], lineW = 0;
+    for (const w of phrase) {
+      const wW = Math.max(charPx, w.word.length * charPx);
+      const widthIfAdded = (line.length ? lineW + spacePx : 0) + wW;
+      if (line.length && widthIfAdded > maxLineW) {
+        lines.push(line); line = [w]; lineW = wW;
+      } else {
+        line.push(w); lineW = widthIfAdded;
+      }
+    }
+    if (line.length) lines.push(line);
+
+    const blockH = lines.length * lineH + padBottom;
+    lines.forEach((lineWords, lineIdx) => {
+      const widths = lineWords.map(w => Math.max(charPx, w.word.length * charPx));
+      const lineWidth = widths.reduce((s, x) => s + x, 0) + (lineWords.length - 1) * spacePx;
+      let x = Math.round((W - lineWidth) / 2);
+      const yExpr = `h-${blockH - lineIdx * lineH}`;
+      lineWords.forEach((w, idx) => {
+        const safe = w.word.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
+        const wStart = (timeOffset + w.start).toFixed(3);
+        const wEnd   = (timeOffset + w.end).toFixed(3);
+        const common = `:x=${x}:y=${yExpr}:fontsize=${fontSize}:borderw=${borderW}:bordercolor=black:shadowcolor=black@0.7:shadowx=${shadowOff}:shadowy=${shadowOff}`;
+        // White layer: visible from this word's start through the phrase end
+        filters.push(`drawtext=text='${safe}'${common}:fontcolor=white:enable='between(t,${wStart},${phraseEnd})'`);
+        // Yellow layer: visible only while this word is being spoken
+        filters.push(`drawtext=text='${safe}'${common}:fontcolor=${HIGHLIGHT}:enable='between(t,${wStart},${wEnd})'`);
+        x += widths[idx] + spacePx;
+      });
+    });
+  }
+  return filters;
+}
+
 // Runs ffmpeg with real-time progress reporting via -progress pipe:1.
 // onPct(0..1) is called each time ffmpeg reports a new out_time_ms value.
 // out_time_ms is in microseconds despite the name; totalSecs is in seconds.
@@ -409,21 +487,61 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
   }
 });
 
+// Walk character timestamps from ElevenLabs and group them into word timings.
+// Returns [{ word, start, end }, ...] in seconds.
+function deriveWordTimings(alignment) {
+  if (!alignment || !Array.isArray(alignment.characters)) return [];
+  const chars  = alignment.characters;
+  const starts = alignment.character_start_times_seconds || [];
+  const ends   = alignment.character_end_times_seconds   || [];
+  const words  = [];
+  let buf      = '';
+  let wordStart = null;
+  let lastEnd   = 0;
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i];
+    const isWordChar = !/\s/.test(c);
+    if (isWordChar) {
+      if (wordStart === null) wordStart = starts[i] ?? lastEnd;
+      buf += c;
+      lastEnd = ends[i] ?? lastEnd;
+    } else if (buf) {
+      words.push({ word: buf, start: wordStart, end: lastEnd });
+      buf = '';
+      wordStart = null;
+    }
+  }
+  if (buf) words.push({ word: buf, start: wordStart ?? 0, end: lastEnd });
+  return words;
+}
+
+// Calls ElevenLabs /with-timestamps endpoint and returns base64 audio + word timings.
+async function elevenlabsTtsWithTimestamps({ voiceId, text, modelId, voiceSettings }) {
+  const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`, {
+    method: 'POST',
+    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, model_id: modelId, voice_settings: voiceSettings }),
+  });
+  if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
+  const data = await ttsRes.json();
+  return {
+    audioBase64:  data.audio_base64,
+    wordTimings:  deriveWordTimings(data.normalized_alignment || data.alignment),
+  };
+}
+
 // ── Generate caller audio (ElevenLabs, chosen voice) ─────────────────────────
 router.post('/api/generate-caller-audio', adminAuth, async (req, res) => {
   if (!process.env.ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ELEVENLABS_API_KEY not configured' });
   const { voiceId, text } = req.body;
   if (!voiceId || !text) return res.status(400).json({ error: 'voiceId and text are required' });
   try {
-    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.4, similarity_boost: 0.7 } }),
+    const { audioBase64, wordTimings } = await elevenlabsTtsWithTimestamps({
+      voiceId, text,
+      modelId: 'eleven_multilingual_v2',
+      voiceSettings: { stability: 0.4, similarity_boost: 0.7 },
     });
-    if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
-    const buffer = await ttsRes.buffer();
-    res.set('Content-Type', 'audio/mpeg');
-    res.send(buffer);
+    res.json({ audioBase64, wordTimings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -435,15 +553,13 @@ router.post('/api/generate-harold-audio', adminAuth, async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   try {
-    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.elevenlabsHaroldVoiceId}`, {
-      method: 'POST',
-      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: config.elevenlabsModel, voice_settings: config.elevenlabsHaroldSettings }),
+    const { audioBase64, wordTimings } = await elevenlabsTtsWithTimestamps({
+      voiceId:       config.elevenlabsHaroldVoiceId,
+      text,
+      modelId:       config.elevenlabsModel,
+      voiceSettings: config.elevenlabsHaroldSettings,
     });
-    if (!ttsRes.ok) throw new Error(`ElevenLabs error: ${ttsRes.status}`);
-    const buffer = await ttsRes.buffer();
-    res.set('Content-Type', 'audio/mpeg');
-    res.send(buffer);
+    res.json({ audioBase64, wordTimings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -544,6 +660,7 @@ async function runVideoJob(job, body) {
   const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
           useRecording, callId, aspectRatio = '1:1', includeRing = false,
           includeCaptions = true,
+          callerWordTimings, haroldWordTimings,
           badge = null, badgeX = 79, badgeY = 11, badgeSize = 34, badgeRotation = 0 } = body;
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
 
@@ -622,10 +739,20 @@ async function runVideoJob(job, body) {
     const haroldStart  = hasCallerAudio ? callerEnd : ringDur;
     const haroldText_q = `"${haroldText}"`;
 
-    const allCaptionFilters = includeCaptions ? [
-      ...(hasCallerAudio ? buildTimedCaptions(callerText.slice(0, 200), callerStart, callerEnd) : []),
-      ...buildTimedCaptions(haroldText_q, haroldStart, totalSecs),
-    ] : [];
+    // Prefer real word timings (karaoke style) when the client provided them;
+    // otherwise fall back to evenly-spaced phrase timing on raw text.
+    const W_CAPTION = aspectRatio === '9:16' ? 1080 : 1080;
+    const callerCaptions = !includeCaptions ? [] : (
+      Array.isArray(callerWordTimings) && callerWordTimings.length
+        ? buildKaraokeCaptions(callerWordTimings, callerStart, 110, W_CAPTION)
+        : (hasCallerAudio ? buildTimedCaptions(callerText.slice(0, 200), callerStart, callerEnd) : [])
+    );
+    const haroldCaptions = !includeCaptions ? [] : (
+      Array.isArray(haroldWordTimings) && haroldWordTimings.length
+        ? buildKaraokeCaptions(haroldWordTimings, haroldStart, 110, W_CAPTION)
+        : buildTimedCaptions(haroldText_q, haroldStart, totalSecs)
+    );
+    const allCaptionFilters = [...callerCaptions, ...haroldCaptions];
 
     const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;

@@ -531,8 +531,8 @@
     <div class="video-options">
       <label><input type="radio" name="aspect" value="1:1" id="aspect-square"> Square 1:1</label>
       <label style="color:var(--amber)"><input type="radio" name="aspect" value="9:16" checked id="aspect-vertical"> Vertical 9:16 <span style="font-size:.74rem;color:var(--muted)">(TikTok / Reels)</span></label>
-      <label style="margin-left:auto"><input type="checkbox" id="include-captions" checked> 💬 Captions</label>
-      <label><input type="checkbox" id="include-ring"> 📞 Phone ring intro</label>
+      <label style="margin-left:auto"><input type="checkbox" id="include-captions"> 💬 Captions</label>
+      <label><input type="checkbox" id="include-ring" checked> 📞 Phone ring intro</label>
     </div>
     <div class="badge-block">
       <div class="badge-row">
@@ -628,6 +628,8 @@
     scene:           null,
     callerAudioData: null,
     haroldAudioData: null,
+    callerWordTimings: null,
+    haroldWordTimings: null,
     imageData:       null,
     useRecording:    false,
     callContext:     null,
@@ -1087,18 +1089,15 @@
       return;
     }
 
-    const buffer = await res.arrayBuffer();
-    const blob   = new Blob([buffer], { type: 'audio/mpeg' });
-    const url    = URL.createObjectURL(blob);
+    // New endpoint returns JSON: { audioBase64, wordTimings }
+    const { audioBase64, wordTimings } = await res.json();
+    const dataUrl = `data:audio/mpeg;base64,${audioBase64}`;
+    state.callerAudioData    = dataUrl;
+    state.callerWordTimings  = wordTimings || [];
+    state.useRecording       = false; // AI voice wins over recording
+    checkVideoReady();
 
-    // Store as base64 for video generation. Clear useRecording so the AI voice
-    // wins at build time (real-call mode auto-defaults useRecording=true).
-    state.useRecording = false;
-    const reader = new FileReader();
-    reader.onload = () => { state.callerAudioData = reader.result; checkVideoReady(); };
-    reader.readAsDataURL(blob);
-
-    document.getElementById('caller-audio-player').src = url;
+    document.getElementById('caller-audio-player').src = dataUrl;
     document.getElementById('caller-audio-wrap').style.display = 'block';
     document.getElementById('btn-regen-caller').style.display = 'inline-flex';
     dot('caller-audio', true);
@@ -1128,15 +1127,13 @@
       return;
     }
 
-    const buffer = await res.arrayBuffer();
-    const blob   = new Blob([buffer], { type: 'audio/mpeg' });
-    const url    = URL.createObjectURL(blob);
+    const { audioBase64, wordTimings } = await res.json();
+    const dataUrl = `data:audio/mpeg;base64,${audioBase64}`;
+    state.haroldAudioData   = dataUrl;
+    state.haroldWordTimings = wordTimings || [];
+    checkVideoReady();
 
-    const reader = new FileReader();
-    reader.onload = () => { state.haroldAudioData = reader.result; checkVideoReady(); };
-    reader.readAsDataURL(blob);
-
-    document.getElementById('harold-audio-player').src = url;
+    document.getElementById('harold-audio-player').src = dataUrl;
     document.getElementById('harold-audio-wrap').style.display = 'block';
     document.getElementById('btn-regen-harold').style.display = 'inline-flex';
     dot('harold-audio', true);
@@ -1225,6 +1222,11 @@
       badgeY:          parseInt(document.getElementById('badge-y').value, 10),
       badgeSize:       parseInt(document.getElementById('badge-size').value, 10),
       badgeRotation:   parseInt(document.getElementById('badge-rot').value, 10),
+      // Word-level timings (from ElevenLabs /with-timestamps) drive the
+      // karaoke captions on the server. Real-call mode uses Twilio audio
+      // and so won't have timings — captions then fall back to phrase timing.
+      haroldWordTimings: state.haroldWordTimings || null,
+      callerWordTimings: state.callerWordTimings || null,
     };
     if (state.useRecording && state.callContext?.id) {
       body.useRecording = true;
