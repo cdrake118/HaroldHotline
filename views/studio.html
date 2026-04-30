@@ -544,9 +544,9 @@
         <img id="badge-preview" alt="" style="display:none;height:36px;border-radius:4px;background:rgba(255,255,255,.04);padding:3px">
       </div>
       <div class="badge-sliders" id="badge-sliders" style="display:none">
-        <div class="badge-slider"><label>Position X</label><input type="range" id="badge-x" min="0" max="100" value="50"><span class="val" id="badge-x-val">50%</span></div>
-        <div class="badge-slider"><label>Position Y</label><input type="range" id="badge-y" min="0" max="100" value="15"><span class="val" id="badge-y-val">15%</span></div>
-        <div class="badge-slider"><label>Size</label><input type="range" id="badge-size" min="5" max="60" value="25"><span class="val" id="badge-size-val">25%</span></div>
+        <div class="badge-slider"><label>Position X</label><input type="range" id="badge-x" min="0" max="100" value="79"><span class="val" id="badge-x-val">79%</span></div>
+        <div class="badge-slider"><label>Position Y</label><input type="range" id="badge-y" min="0" max="100" value="11"><span class="val" id="badge-y-val">11%</span></div>
+        <div class="badge-slider"><label>Size</label><input type="range" id="badge-size" min="5" max="60" value="34"><span class="val" id="badge-size-val">34%</span></div>
         <div class="badge-slider"><label>Rotation</label><input type="range" id="badge-rot" min="-180" max="180" value="0"><span class="val" id="badge-rot-val">0°</span></div>
       </div>
       <div class="badge-preview-canvas" id="badge-preview-canvas" style="display:none">
@@ -1039,10 +1039,28 @@
   function checkVideoReady() {
     const haveCallerAudio = !!state.callerAudioData || (state.useRecording && state.callContext?.id);
     // Wisdom mode is Harold-solo, so caller audio is not required at all.
-    const ready = isWisdomMode()
-      ? !!(state.haroldAudioData && state.imageData)
-      : !!(state.haroldAudioData && state.imageData && haveCallerAudio);
-    document.getElementById('btn-gen-video').disabled = !ready;
+    const missing = [];
+    if (!state.haroldAudioData) missing.push("Harold audio (step 3)");
+    if (!state.imageData)       missing.push("a photo (step 4)");
+    if (!isWisdomMode() && !haveCallerAudio) missing.push("caller audio (step 2)");
+
+    const btn    = document.getElementById('btn-gen-video');
+    const status = document.getElementById('status-video');
+    btn.disabled = missing.length > 0;
+
+    // Only set a "missing pieces" hint if we haven't already shown a real status
+    // (success/error after a generation run). Don't overwrite those.
+    const isStaleHint = !status.textContent || status.dataset.hint === '1';
+    if (missing.length > 0) {
+      if (isStaleHint) {
+        status.textContent = `Need: ${missing.join(', ')}`;
+        status.className = 'status-line';
+        status.dataset.hint = '1';
+      }
+    } else if (status.dataset.hint === '1') {
+      status.textContent = '';
+      delete status.dataset.hint;
+    }
   }
 
   // -- Step 2: Caller audio ------------------------------------------------------

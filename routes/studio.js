@@ -544,7 +544,7 @@ async function runVideoJob(job, body) {
   const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
           useRecording, callId, aspectRatio = '1:1', includeRing = false,
           includeCaptions = true,
-          badge = null, badgeX = 50, badgeY = 15, badgeSize = 25, badgeRotation = 0 } = body;
+          badge = null, badgeX = 79, badgeY = 11, badgeSize = 34, badgeRotation = 0 } = body;
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
 
   function setProgress(pct, msg) { job.pct = pct; if (msg) job.msg = msg; }
