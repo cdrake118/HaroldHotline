@@ -74,11 +74,11 @@ function buildTimedCaptions(text, startSec, endSec, fontSize = 120) {
   const chunkDur = (endSec - startSec) / chunks.length;
   // Wrap width / padding / border / shadow all scale with fontSize so the layout
   // stays well-proportioned at any size (~0.55 = avg sans-serif char-width ratio).
-  const wrapChars = Math.max(8, Math.floor(980 / (fontSize * 0.55)));
-  const lineH     = Math.round(fontSize * 1.3);
-  const padBottom = Math.round(fontSize * 0.6);
-  const borderW   = Math.max(3, Math.round(fontSize * 0.05));
-  const shadowOff = Math.max(2, Math.round(fontSize * 0.03));
+  const wrapChars = Math.max(8, Math.floor(980 / (fontSize * 0.6)));
+  const lineH     = Math.round(fontSize * 1.4);
+  const padBottom = Math.round(fontSize * 0.7);
+  const shadowOff = Math.max(1, Math.round(fontSize * 0.02));
+  const FONT_FILE = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
   const filters = [];
   chunks.forEach((chunk, idx) => {
     const t0 = +(startSec + idx * chunkDur).toFixed(3);
@@ -88,7 +88,7 @@ function buildTimedCaptions(text, startSec, endSec, fontSize = 120) {
     lines.forEach((line, li) => {
       const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '\u2019').replace(/:/g, '\\:');
       filters.push(
-        `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${blockH - li * lineH}:fontsize=${fontSize}:fontcolor=white:borderw=${borderW}:bordercolor=black:shadowcolor=black@0.7:shadowx=${shadowOff}:shadowy=${shadowOff}:enable='between(t,${t0},${t1})'`
+        `drawtext=text='${safe}':fontfile=${FONT_FILE}:x=(w-text_w)/2:y=h-${blockH - li * lineH}:fontsize=${fontSize}:fontcolor=white:shadowcolor=black@0.55:shadowx=${shadowOff}:shadowy=${shadowOff}:enable='between(t,${t0},${t1})'`
       );
     });
   });
@@ -106,15 +106,38 @@ function buildTimedCaptions(text, startSec, endSec, fontSize = 120) {
 // Word timings from ElevenLabs are relative to the audio file.
 function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080) {
   if (!Array.isArray(wordTimings) || !wordTimings.length) return [];
-  // Approximate avg sans-serif advance widths; close enough for layout.
-  const charPx    = fontSize * 0.55;
-  const spacePx   = fontSize * 0.30;
-  const lineH     = Math.round(fontSize * 1.3);
-  const padBottom = Math.round(fontSize * 0.6);
-  const borderW   = Math.max(3, Math.round(fontSize * 0.05));
-  const shadowOff = Math.max(2, Math.round(fontSize * 0.03));
-  const maxLineW  = Math.floor(W * 0.92); // leave a bit of side padding
-  const HIGHLIGHT = 'yellow';
+  // Per-character advance estimates for DejaVu Sans Bold. The previous flat
+  // 0.55 underestimated wide glyphs (m/M/w/W) and made some words overlap their
+  // neighbor — visible as e.g. "themof" instead of "them of". Per-character
+  // width reduces that to typographic noise.
+  const FONT_FILE = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+  // Rough advance ratios for DejaVu Sans Bold (x advance / em). Values are
+  // intentionally generous — slight over-estimate is invisible, under-estimate
+  // collides words.
+  const CHAR_W = (() => {
+    const t = {}; const set = (s, v) => { for (const c of s) t[c] = v; };
+    set('iIl|.,;:\'`!()[]{}', 0.32);
+    set(' ', 0.34);
+    set('rftj-', 0.42);
+    set('1', 0.55);
+    set('234567890', 0.62);
+    set('abcdeghknopqsuvxyzABCDEFGHJKLNOPQRSTUVXYZ', 0.66);
+    set('mwMW', 0.92);
+    return t;
+  })();
+  function wordWidthPx(word) {
+    let total = 0;
+    for (const c of word) total += (CHAR_W[c] ?? 0.66) * fontSize;
+    return total;
+  }
+  const spacePx   = fontSize * 0.34;
+  const charPx    = fontSize * 0.6; // used only for the wrap-budget math
+  const lineH     = Math.round(fontSize * 1.4);
+  const padBottom = Math.round(fontSize * 0.7);
+  // Subtle shadow only — no border, matching Instagram's look
+  const shadowOff = Math.max(1, Math.round(fontSize * 0.02));
+  const maxLineW  = Math.floor(W * 0.92);
+  const HIGHLIGHT = '0xffdf26';
 
   // Group words into phrases of up to ~5 words, breaking on natural pauses.
   // A "natural pause" = end-of-sentence punctuation or a >0.4s gap to next word.
@@ -145,11 +168,11 @@ function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080)
     const phraseStart = (timeOffset + phrase[0].start).toFixed(3);
     const phraseEnd   = (timeOffset + phrase[phrase.length - 1].end).toFixed(3);
 
-    // Greedy word-wrap into lines that fit maxLineW.
+    // Greedy word-wrap using per-character advance estimates.
     const lines = [];
     let line = [], lineW = 0;
     for (const w of phrase) {
-      const wW = Math.max(charPx, w.word.length * charPx);
+      const wW = wordWidthPx(w.word);
       const widthIfAdded = (line.length ? lineW + spacePx : 0) + wW;
       if (line.length && widthIfAdded > maxLineW) {
         lines.push(line); line = [w]; lineW = wW;
@@ -161,21 +184,20 @@ function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080)
 
     const blockH = lines.length * lineH + padBottom;
     lines.forEach((lineWords, lineIdx) => {
-      const widths = lineWords.map(w => Math.max(charPx, w.word.length * charPx));
+      const widths = lineWords.map(w => wordWidthPx(w.word));
       const lineWidth = widths.reduce((s, x) => s + x, 0) + (lineWords.length - 1) * spacePx;
       let x = Math.round((W - lineWidth) / 2);
-      // Per-line baseline as an offset from the bottom of the video. Each word's
-      // y is then "baseline - max_glyph_a" (evaluated by ffmpeg per drawtext).
       const baselineFromBottom = blockH - lineIdx * lineH - ascent;
       const yExpr = `h-${baselineFromBottom}-max_glyph_a`;
       lineWords.forEach((w, idx) => {
         const safe = w.word.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:');
         const wStart = (timeOffset + w.start).toFixed(3);
         const wEnd   = (timeOffset + w.end).toFixed(3);
-        const common = `:x=${x}:y=${yExpr}:fontsize=${fontSize}:borderw=${borderW}:bordercolor=black:shadowcolor=black@0.7:shadowx=${shadowOff}:shadowy=${shadowOff}`;
-        // White layer: visible from this word's start through the phrase end
+        // Subtle drop shadow only (no border) — matches Instagram captions.
+        // Bold DejaVu Sans is loaded explicitly so the look is consistent on
+        // any host where ffmpeg's default font might differ.
+        const common = `:fontfile=${FONT_FILE}:x=${Math.round(x)}:y=${yExpr}:fontsize=${fontSize}:shadowcolor=black@0.55:shadowx=${shadowOff}:shadowy=${shadowOff}`;
         filters.push(`drawtext=text='${safe}'${common}:fontcolor=white:enable='between(t,${wStart},${phraseEnd})'`);
-        // Yellow layer: visible only while this word is being spoken
         filters.push(`drawtext=text='${safe}'${common}:fontcolor=${HIGHLIGHT}:enable='between(t,${wStart},${wEnd})'`);
         x += widths[idx] + spacePx;
       });

@@ -5,11 +5,13 @@ FROM node:20-bookworm-slim
 
 # System deps:
 #   ffmpeg → audio/video composition + ffprobe (Debian's package ships both)
+#   fonts-dejavu-core → DejaVuSans-Bold.ttf for studio drawtext captions
 #   python3, make, g++ → required for better-sqlite3 native build
 #   ca-certificates → HTTPS to Twilio/OpenAI/ElevenLabs
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ffmpeg \
+      fonts-dejavu-core \
       ca-certificates \
       python3 \
       make \
