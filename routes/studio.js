@@ -111,24 +111,33 @@ function buildKaraokeCaptions(wordTimings, timeOffset, fontSize = 110, W = 1080)
   // neighbor — visible as e.g. "themof" instead of "them of". Per-character
   // width reduces that to typographic noise.
   const FONT_FILE = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
-  // Rough advance ratios for DejaVu Sans Bold (x advance / em). Values are
-  // intentionally generous — slight over-estimate is invisible, under-estimate
-  // collides words.
+  // Per-character advance ratios for DejaVu Sans Bold (advance / em). These are
+  // approximate but separated by category since bold caps are visibly wider
+  // than lowercase. Anything not listed falls back to the regular-lowercase
+  // ratio. A small safety multiplier on the total compensates for residual
+  // estimation error so words never collide.
   const CHAR_W = (() => {
     const t = {}; const set = (s, v) => { for (const c of s) t[c] = v; };
-    set('iIl|.,;:\'`!()[]{}', 0.32);
-    set(' ', 0.34);
-    set('rftj-', 0.42);
-    set('1', 0.55);
-    set('234567890', 0.62);
-    set('abcdeghknopqsuvxyzABCDEFGHJKLNOPQRSTUVXYZ', 0.66);
-    set('mwMW', 0.92);
+    set('il|',                  0.32);
+    set('I.,;:\'`!()[]{}',      0.34);
+    set(' ',                    0.36);
+    set('jrft-',                0.45);
+    set('cs',                   0.55);
+    set('1',                    0.62);
+    set('234567890vxyz',        0.65);
+    set('abdeghknopquA',        0.68);
+    set('BCDEFGHJKLNOPQRSTUVXYZ', 0.78);
+    set('m',                    0.95);
+    set('w',                    0.92);
+    set('M',                    0.86);
+    set('W',                    1.08);
     return t;
   })();
+  const WIDTH_SAFETY = 1.06;
   function wordWidthPx(word) {
     let total = 0;
-    for (const c of word) total += (CHAR_W[c] ?? 0.66) * fontSize;
-    return total;
+    for (const c of word) total += (CHAR_W[c] ?? 0.68) * fontSize;
+    return total * WIDTH_SAFETY;
   }
   const spacePx   = fontSize * 0.34;
   const charPx    = fontSize * 0.6; // used only for the wrap-budget math
