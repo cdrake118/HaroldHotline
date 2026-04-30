@@ -553,9 +553,7 @@ async function runVideoJob(job, body) {
       ...buildTimedCaptions(haroldText_q, haroldStart, totalSecs),
     ] : [];
 
-    // Use single-quoted text with curly apostrophe — ffmpeg filter graphs treat
-    // bare ' as a strong-quote start, which breaks parsing if left unescaped.
-    const watermark = `drawtext=text='Harold’s Hotline':x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
+    const watermark = `drawtext=text='haroldshotline.com':x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
 
     const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
