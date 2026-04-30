@@ -535,12 +535,15 @@
   }
 
   // -- Load voices on page load --------------------------------------------------
+  let availableVoices = []; // populated by loadVoices, used by pickRandomVoice
+
   async function loadVoices() {
     const badge = document.getElementById('badge-voices');
     const sel   = document.getElementById('caller-voice-select');
     const res   = await adminFetch('/studio/api/voices');
     if (!res || !res.ok) { badge.textContent = 'Could not load voices'; return; }
     const { voices } = await res.json();
+    availableVoices = voices;
     voices.forEach(v => {
       const opt = document.createElement('option');
       opt.value = v.id;
@@ -552,6 +555,21 @@
     sel.addEventListener('change', () => {
       document.getElementById('btn-gen-caller').disabled = !sel.value || !state.callerScript;
     });
+  }
+
+  // Pick a voice that hasn't been used in the last few auto-generations.
+  // Tracks the last 5 voice IDs in localStorage so callers feel varied across runs.
+  function pickRandomVoice() {
+    if (!availableVoices.length) return null;
+    let recent;
+    try { recent = JSON.parse(localStorage.getItem('haroldRecentCallerVoices') || '[]'); }
+    catch (_) { recent = []; }
+    const fresh = availableVoices.filter(v => !recent.includes(v.id));
+    const pool  = fresh.length ? fresh : availableVoices; // wrap around if we've burned through everyone
+    const pick  = pool[Math.floor(Math.random() * pool.length)];
+    const next  = [pick.id, ...recent.filter(id => id !== pick.id)].slice(0, 5);
+    try { localStorage.setItem('haroldRecentCallerVoices', JSON.stringify(next)); } catch (_) {}
+    return pick.id;
   }
 
   // -- Step 1: Generate script ---------------------------------------------------
@@ -1115,6 +1133,16 @@
           await generateScript();
         } else {
           await generateHaroldResponse();
+        }
+      }
+      // Pick a random caller voice (avoiding the last 5 used) so each auto-run
+      // sounds different. Skipped in real-call mode where we use the recording.
+      if (!state.callerAudioData && !state.useRecording) {
+        const voiceId = pickRandomVoice();
+        if (voiceId) {
+          const sel = document.getElementById('caller-voice-select');
+          sel.value = voiceId;
+          sel.dispatchEvent(new Event('change'));
         }
       }
       // 2+3. Caller and Harold audio in parallel
