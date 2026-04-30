@@ -557,17 +557,46 @@
     });
   }
 
-  // Pick a voice that hasn't been used in the last few auto-generations.
-  // Tracks the last 5 voice IDs in localStorage so callers feel varied across runs.
-  function pickRandomVoice() {
+  // Soft preferences mapping caller persona → voice characteristics. Filters the
+  // available ElevenLabs voices to those matching the persona's mood; falls back
+  // to the full pool if no voice matches (e.g. small voice library).
+  const PERSONA_VOICE_PREFS = {
+    panicked:     { age: ['young', 'middle aged'] },
+    grumpy:       { age: ['old'], gender: ['male'] },
+    confused:     { age: ['old'] },
+    dramatic:     { age: ['young'] },
+    sincere:      { age: ['middle aged'] },
+    deadpan:      {}, // anyone reads as deadpan
+    enthusiastic: { age: ['young'] },
+  };
+
+  // Pick a voice for auto-generation. Soft-filters by persona, then excludes the
+  // last 5 used voices so callers feel varied across runs. Falls back gracefully
+  // if filters leave nothing in the pool.
+  function pickRandomVoice(persona) {
     if (!availableVoices.length) return null;
     let recent;
     try { recent = JSON.parse(localStorage.getItem('haroldRecentCallerVoices') || '[]'); }
     catch (_) { recent = []; }
-    const fresh = availableVoices.filter(v => !recent.includes(v.id));
-    const pool  = fresh.length ? fresh : availableVoices; // wrap around if we've burned through everyone
-    const pick  = pool[Math.floor(Math.random() * pool.length)];
-    const next  = [pick.id, ...recent.filter(id => id !== pick.id)].slice(0, 5);
+
+    const prefs = PERSONA_VOICE_PREFS[persona] || {};
+    const matchesPrefs = v => {
+      for (const [key, allowed] of Object.entries(prefs)) {
+        const label = (v.labels?.[key] || '').toLowerCase();
+        if (!allowed.includes(label)) return false;
+      }
+      return true;
+    };
+
+    const matching = availableVoices.filter(matchesPrefs);
+    // Preference order: matching+fresh → matching → fresh → any
+    let pool = matching.filter(v => !recent.includes(v.id));
+    if (!pool.length) pool = matching;
+    if (!pool.length) pool = availableVoices.filter(v => !recent.includes(v.id));
+    if (!pool.length) pool = availableVoices;
+
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const next = [pick.id, ...recent.filter(id => id !== pick.id)].slice(0, 5);
     try { localStorage.setItem('haroldRecentCallerVoices', JSON.stringify(next)); } catch (_) {}
     return pick.id;
   }
@@ -1135,10 +1164,11 @@
           await generateHaroldResponse();
         }
       }
-      // Pick a random caller voice (avoiding the last 5 used) so each auto-run
-      // sounds different. Skipped in real-call mode where we use the recording.
+      // Pick a caller voice that fits the persona (and avoids the last 5 used).
+      // Skipped in real-call mode where we use the actual Twilio recording.
       if (!state.callerAudioData && !state.useRecording) {
-        const voiceId = pickRandomVoice();
+        const persona = document.getElementById('caller-persona').value;
+        const voiceId = pickRandomVoice(persona);
         if (voiceId) {
           const sel = document.getElementById('caller-voice-select');
           sel.value = voiceId;

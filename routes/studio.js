@@ -50,7 +50,7 @@ function wrapText(text, maxChars = 36) {
 
 // Splits text into 4-word phrases and builds timed drawtext filters for each phrase.
 // startSec / endSec define the speaker's window in the final audio timeline.
-function buildTimedCaptions(text, startSec, endSec, fontSize = 40) {
+function buildTimedCaptions(text, startSec, endSec, fontSize = 120) {
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (!words.length || endSec <= startSec) return [];
   // Ensure each phrase gets at least 0.7s — use fewer words per chunk for short audio
@@ -60,17 +60,23 @@ function buildTimedCaptions(text, startSec, endSec, fontSize = 40) {
   const chunks = [];
   for (let i = 0; i < words.length; i += CHUNK) chunks.push(words.slice(i, i + CHUNK).join(' '));
   const chunkDur = (endSec - startSec) / chunks.length;
-  const lineH = Math.round(fontSize * 1.3);
+  // Wrap width / padding / border / shadow all scale with fontSize so the layout
+  // stays well-proportioned at any size (~0.55 = avg sans-serif char-width ratio).
+  const wrapChars = Math.max(8, Math.floor(980 / (fontSize * 0.55)));
+  const lineH     = Math.round(fontSize * 1.3);
+  const padBottom = Math.round(fontSize * 0.6);
+  const borderW   = Math.max(3, Math.round(fontSize * 0.05));
+  const shadowOff = Math.max(2, Math.round(fontSize * 0.03));
   const filters = [];
   chunks.forEach((chunk, idx) => {
     const t0 = +(startSec + idx * chunkDur).toFixed(3);
     const t1 = +(startSec + (idx + 1) * chunkDur).toFixed(3);
-    const lines = wrapText(chunk, 32);
-    const blockH = lines.length * lineH + 24;
+    const lines = wrapText(chunk, wrapChars);
+    const blockH = lines.length * lineH + padBottom;
     lines.forEach((line, li) => {
       const safe = line.replace(/\\/g, '\\\\').replace(/'/g, '\u2019').replace(/:/g, '\\:');
       filters.push(
-        `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${blockH - li * lineH}:fontsize=${fontSize}:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,${t0},${t1})'`
+        `drawtext=text='${safe}':x=(w-text_w)/2:y=h-${blockH - li * lineH}:fontsize=${fontSize}:fontcolor=white:borderw=${borderW}:bordercolor=black:shadowcolor=black@0.7:shadowx=${shadowOff}:shadowy=${shadowOff}:enable='between(t,${t0},${t1})'`
       );
     });
   });
