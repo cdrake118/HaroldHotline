@@ -467,7 +467,8 @@ router.get('/api/video-progress/:jobId', adminAuth, (req, res) => {
 
 async function runVideoJob(job, body) {
   const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
-          useRecording, callId, aspectRatio = '1:1', includeRing = false } = body;
+          useRecording, callId, aspectRatio = '1:1', includeRing = false,
+          includeCaptions = true } = body;
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
 
   function setProgress(pct, msg) { job.pct = pct; if (msg) job.msg = msg; }
@@ -545,11 +546,10 @@ async function runVideoJob(job, body) {
     const haroldStart  = hasCallerAudio ? callerEnd : ringDur;
     const haroldText_q = `"${haroldText}"`;
 
-    const allCaptionFilters = [
+    const allCaptionFilters = includeCaptions ? [
       ...(hasCallerAudio ? buildTimedCaptions(callerText.slice(0, 200), callerStart, callerEnd) : []),
       ...buildTimedCaptions(haroldText_q, haroldStart, totalSecs),
-    ];
-    const captionFilters = allCaptionFilters.join(',');
+    ] : [];
 
     // Use single-quoted text with curly apostrophe — ffmpeg filter graphs treat
     // bare ' as a strong-quote start, which breaks parsing if left unescaped.
@@ -557,7 +557,9 @@ async function runVideoJob(job, body) {
 
     const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
-    const vf = `${scaleCrop},${watermark},${captionFilters}`;
+    // Build filter chain by joining only the non-empty parts so we don't end up
+    // with a trailing comma when captions are disabled (ffmpeg would reject it).
+    const vf = [scaleCrop, watermark, ...allCaptionFilters].join(',');
 
     await runFfmpegProgress([
       '-loop', '1', '-i', tmpImg, '-i', audioFile,

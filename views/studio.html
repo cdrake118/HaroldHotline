@@ -442,7 +442,8 @@
     <div class="video-options">
       <label><input type="radio" name="aspect" value="1:1" id="aspect-square"> Square 1:1</label>
       <label style="color:var(--amber)"><input type="radio" name="aspect" value="9:16" checked id="aspect-vertical"> Vertical 9:16 <span style="font-size:.74rem;color:var(--muted)">(TikTok / Reels)</span></label>
-      <label style="margin-left:auto"><input type="checkbox" id="include-ring"> 📞 Phone ring intro</label>
+      <label style="margin-left:auto"><input type="checkbox" id="include-captions" checked> 💬 Captions</label>
+      <label><input type="checkbox" id="include-ring"> 📞 Phone ring intro</label>
     </div>
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
@@ -858,6 +859,7 @@
       haroldText:      document.getElementById('harold-response').value.trim(),
       aspectRatio:     document.querySelector('input[name="aspect"]:checked')?.value || '1:1',
       includeRing:     document.getElementById('include-ring').checked,
+      includeCaptions: document.getElementById('include-captions').checked,
     };
     if (state.useRecording && state.callContext?.id) {
       body.useRecording = true;
