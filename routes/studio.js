@@ -20,6 +20,17 @@ const HAROLD_GALLERY_DIR  = path.join(__dirname, '..', 'public', 'harold-gallery
 const voicesCache = { voices: null, ts: 0 };
 const VOICES_TTL_MS = 60 * 60 * 1000;
 
+// In-memory video job tracker — polling endpoint reads from here
+// Switched from SSE because Railway's proxy buffers event-stream responses.
+const videoJobs = new Map(); // jobId -> { pct, msg, done, error, videoBase64, createdAt }
+const JOB_MAX_AGE_MS = 30 * 60 * 1000;
+function purgeOldJobs() {
+  const now = Date.now();
+  for (const [id, j] of videoJobs) {
+    if (now - j.createdAt > JOB_MAX_AGE_MS) videoJobs.delete(id);
+  }
+}
+
 const router = express.Router();
 
 function wrapText(text, maxChars = 36) {
@@ -397,33 +408,51 @@ router.post('/api/generate-image', adminAuth, async (req, res) => {
 //   - realCaller:  useRecording=true + callId (Twilio fetch) + callerText
 //
 // Emits { pct, msg } events during encoding, then { pct:100, done:true, videoBase64 }.
-router.post('/api/generate-video', adminAuth, async (req, res) => {
-  // SSE — tell compression middleware to skip gzip for this stream
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-store, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  if (res.socket && typeof res.socket.setNoDelay === 'function') res.socket.setNoDelay(true);
-  res.flushHeaders();
-
-  function emit(data) {
-    if (res.writableEnded) return;
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-    if (typeof res.flush === 'function') res.flush();
-  }
-
+router.post('/api/generate-video', adminAuth, (req, res) => {
   const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
-          useRecording, callId, aspectRatio = '1:1', includeRing = false } = req.body;
+          useRecording, callId } = req.body || {};
 
   if (!imageData || !haroldAudioData || !haroldText) {
-    emit({ error: 'imageData, haroldAudioData, and haroldText are required' });
-    return res.end();
+    return res.status(400).json({ error: 'imageData, haroldAudioData, and haroldText are required' });
   }
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
   if (hasCallerAudio && !callerText) {
-    emit({ error: 'callerText required when including caller audio' });
-    return res.end();
+    return res.status(400).json({ error: 'callerText required when including caller audio' });
   }
+
+  purgeOldJobs();
+
+  const jobId = crypto.randomUUID();
+  const job = { jobId, pct: 0, msg: 'Queued', done: false, error: null, videoBase64: null, createdAt: Date.now() };
+  videoJobs.set(jobId, job);
+
+  // Kick off the work in the background — response returns immediately
+  runVideoJob(job, req.body).catch(err => {
+    console.error('Studio generate video error:', err);
+    job.error = err.message || 'Failed to generate video';
+    job.done  = true;
+  });
+
+  res.json({ jobId });
+});
+
+router.get('/api/video-progress/:jobId', adminAuth, (req, res) => {
+  const job = videoJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found or expired' });
+  res.json({ pct: job.pct, msg: job.msg, done: job.done, error: job.error, videoBase64: job.videoBase64 });
+  // Schedule deletion 10s after the client first sees done=true (gives time for retries)
+  if (job.done && !job._deleteScheduled) {
+    job._deleteScheduled = true;
+    setTimeout(() => videoJobs.delete(job.jobId), 10000);
+  }
+});
+
+async function runVideoJob(job, body) {
+  const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
+          useRecording, callId, aspectRatio = '1:1', includeRing = false } = body;
+  const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
+
+  function setProgress(pct, msg) { job.pct = pct; if (msg) job.msg = msg; }
 
   const uid         = crypto.randomUUID();
   const tmpImg      = path.join(os.tmpdir(), `studio-img-${uid}.jpg`);
@@ -433,12 +462,8 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
   const tmpVid      = path.join(os.tmpdir(), `studio-vid-${uid}.mp4`);
   const ringAudioPath = path.join(__dirname, '..', 'public', 'audio', 'ring.mp3');
 
-  const keepalive = setInterval(() => {
-    if (!res.writableEnded) { res.write(': keep-alive\n\n'); if (typeof res.flush === 'function') res.flush(); }
-  }, 10000);
-
   try {
-    emit({ pct: 5, msg: 'Preparing files…' });
+    setProgress(5, 'Preparing files…');
     fs.writeFileSync(tmpImg,    Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64'));
     fs.writeFileSync(tmpHarold, Buffer.from(haroldAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
 
@@ -446,7 +471,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       if (callerAudioData) {
         fs.writeFileSync(tmpCaller, Buffer.from(callerAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
       } else {
-        emit({ pct: 10, msg: 'Fetching recording…' });
+        setProgress(10, 'Fetching recording…');
         const call = db.getCallById(parseInt(callId, 10));
         if (!call || !call.recording_sid) throw new Error('Call recording not available');
         const recUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Recordings/${call.recording_sid}.mp3`;
@@ -457,15 +482,13 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       }
     }
 
-    // Measure caller duration before any concat
     let callerDur = 0;
     if (hasCallerAudio) {
-      emit({ pct: 14, msg: 'Measuring audio…' });
+      setProgress(14, 'Measuring audio…');
       const { stdout } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller]);
       callerDur = parseFloat(stdout.trim()) || 0;
     }
 
-    // Measure ring duration if requested and file exists
     const hasRing = includeRing && fs.existsSync(ringAudioPath);
     let ringDur = 0;
     if (hasRing) {
@@ -473,8 +496,7 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       ringDur = parseFloat(rOut.trim()) || 0;
     }
 
-    // Build combined audio track
-    emit({ pct: 18, msg: 'Combining audio…' });
+    setProgress(18, 'Combining audio…');
     let audioFile = tmpHarold;
     if (hasCallerAudio && hasRing) {
       await execFileAsync('ffmpeg', [
@@ -499,11 +521,10 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       audioFile = tmpCombined;
     }
 
-    emit({ pct: 20, msg: 'Starting encode…' });
+    setProgress(20, 'Starting encode…');
     const { stdout: durOut } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioFile]);
     const totalSecs = parseFloat(durOut.trim()) || 0;
 
-    // Build phrase-timed captions using speaker time offsets
     const callerStart  = ringDur;
     const callerEnd    = ringDur + callerDur;
     const haroldStart  = hasCallerAudio ? callerEnd : ringDur;
@@ -517,7 +538,6 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
 
     const watermark = `drawtext=text="Harold's Hotline":x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
 
-    // Scale/crop dimensions based on aspect ratio
     const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
     const vf = `${scaleCrop},${watermark},${captionFilters}`;
@@ -531,22 +551,17 @@ router.post('/api/generate-video', adminAuth, async (req, res) => {
       '-progress', 'pipe:1', '-nostats',
       '-y', tmpVid,
     ], totalSecs, pct => {
-      emit({ pct: Math.round(20 + pct * 70), msg: 'Encoding video…' });
+      setProgress(Math.round(20 + pct * 70), 'Encoding video…');
     });
 
-    emit({ pct: 93, msg: 'Packaging…' });
-    const videoBase64 = fs.readFileSync(tmpVid).toString('base64');
-    emit({ pct: 100, done: true, videoBase64 });
-    res.end();
-  } catch (err) {
-    console.error('Studio generate video error:', err);
-    emit({ error: err.message || 'Failed to generate video' });
-    res.end();
+    setProgress(93, 'Packaging…');
+    job.videoBase64 = fs.readFileSync(tmpVid).toString('base64');
+    setProgress(100, 'Done');
+    job.done = true;
   } finally {
-    clearInterval(keepalive);
     [tmpImg, tmpCaller, tmpHarold, tmpCombined, tmpVid].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
   }
-});
+}
 
 // ── Save a produced post to history ──────────────────────────────────────────
 router.post('/api/save-post', adminAuth, (req, res) => {

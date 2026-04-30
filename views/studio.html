@@ -420,14 +420,15 @@
     <div class="step-header">
       <div class="step-num" id="num-4">4</div>
       <h2>Harold's Photo</h2>
+      <span class="badge">pick from gallery</span>
     </div>
-    <div class="btn-row">
-      <button class="action-btn" id="btn-gen-image" onclick="generateImage()" disabled>🖼 Generate Photo</button>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Click any photo below to use it. Generation is available as a fallback if you want a brand-new image.</div>
+    <div class="gallery-grid" id="gallery-grid"></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="action-btn secondary" id="btn-gen-image" onclick="generateImage()" disabled>✨ Generate New Photo</button>
       <button class="action-btn secondary" id="btn-regen-image" style="display:none" onclick="generateImage()">↻ Regenerate</button>
-      <button class="action-btn secondary" id="btn-toggle-gallery" onclick="toggleGallery()">📚 Pick from Gallery</button>
       <button class="action-btn secondary" id="btn-save-image" style="display:none" onclick="saveImageToGallery()">💾 Save to Gallery</button>
     </div>
-    <div class="gallery-grid" id="gallery-grid" style="display:none"></div>
     <div class="image-preview" id="image-preview"></div>
     <div class="status-line" id="status-image"></div>
   </div>
@@ -823,60 +824,56 @@
     activeGenerations++;
     try {
       const creds = getAdminCreds();
-      const headers = { 'Content-Type': 'application/json' };
-      if (creds) headers.Authorization = `Basic ${creds}`;
+      const authHeaders = creds ? { Authorization: `Basic ${creds}` } : {};
 
-      const res = await fetch('/studio/api/generate-video', {
+      // Start the job — server returns a jobId immediately, then we poll for progress.
+      const startRes = await fetch('/studio/api/generate-video', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
       });
-
-      if (res.status === 401) {
+      if (startRes.status === 401) {
         location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
         return;
       }
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e?.error || `HTTP ${res.status}`);
+      if (!startRes.ok) {
+        const e = await startRes.json().catch(() => ({}));
+        throw new Error(e?.error || `HTTP ${startRes.status}`);
       }
+      const { jobId } = await startRes.json();
+      if (!jobId) throw new Error('Server did not return a job ID.');
 
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let downloaded = false;
-
+      // Poll until done. Bail out hard after ~5 minutes of no completion.
+      const maxAttempts = 600; // 600 * 500ms = 5 minutes
+      let attempts = 0;
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop(); // keep any partial trailing chunk
-        for (const part of parts) {
-          if (!part.startsWith('data: ')) continue;
-          let obj;
-          try { obj = JSON.parse(part.slice(6)); } catch (_) { continue; }
-          if (obj.error) throw new Error(obj.error);
-          if (obj.pct !== undefined) setVideoProgress(obj.pct, obj.msg || '');
-          if (obj.done && obj.videoBase64) {
-            const bytes = Uint8Array.from(atob(obj.videoBase64), c => c.charCodeAt(0));
-            const blob  = new Blob([bytes], { type: 'video/mp4' });
-            if (state._videoBlobUrl) URL.revokeObjectURL(state._videoBlobUrl);
-            state._videoBlobUrl = URL.createObjectURL(blob);
-            // Download and preview share one blob URL
-            const a = document.createElement('a');
-            a.href = state._videoBlobUrl; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
-            const vid = document.getElementById('video-preview');
-            vid.src = state._videoBlobUrl;
-            document.getElementById('video-preview-wrap').style.display = 'block';
-            vid.play().catch(() => {});
-            downloaded = true;
-            dot('video', true);
-            status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
-          }
+        await new Promise(r => setTimeout(r, 500));
+        if (++attempts > maxAttempts) throw new Error('Timed out waiting for video.');
+        const pollRes = await fetch(`/studio/api/video-progress/${jobId}`, { headers: authHeaders });
+        if (!pollRes.ok) {
+          if (pollRes.status === 404) throw new Error('Job expired. Please try again.');
+          continue; // transient — retry
         }
+        const data = await pollRes.json();
+        if (data.error) throw new Error(data.error);
+        if (typeof data.pct === 'number') setVideoProgress(data.pct, data.msg || '');
+        if (data.done && data.videoBase64) {
+          const bytes = Uint8Array.from(atob(data.videoBase64), c => c.charCodeAt(0));
+          const blob  = new Blob([bytes], { type: 'video/mp4' });
+          if (state._videoBlobUrl) URL.revokeObjectURL(state._videoBlobUrl);
+          state._videoBlobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = state._videoBlobUrl; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
+          const vid = document.getElementById('video-preview');
+          vid.src = state._videoBlobUrl;
+          document.getElementById('video-preview-wrap').style.display = 'block';
+          vid.play().catch(() => {});
+          dot('video', true);
+          status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
+          break;
+        }
+        if (data.done && !data.videoBase64) throw new Error('Job finished without video data.');
       }
-      if (!downloaded) throw new Error('No video data received from server.');
     } catch (err) {
       // Keep the progress bar visible so the user can see where it stopped, but stop the animation
       clearTimeout(progressIdleTimer);
@@ -942,13 +939,7 @@
 
   // -- Step 4 helpers: gallery & save --------------------------------------------
   let galleryLoaded = false;
-  async function toggleGallery() {
-    const grid = document.getElementById('gallery-grid');
-    const open = grid.style.display === 'none';
-    if (open && !galleryLoaded) await loadGallery();
-    grid.style.display = open ? 'grid' : 'none';
-    document.getElementById('btn-toggle-gallery').textContent = open ? '✕ Close Gallery' : '📚 Pick from Gallery';
-  }
+  let galleryImageUrls = []; // ordered list (most recent first) for auto-pick
 
   async function loadGallery() {
     const grid = document.getElementById('gallery-grid');
@@ -956,6 +947,7 @@
     const res = await adminFetch('/studio/api/gallery');
     if (!res || !res.ok) { grid.innerHTML = '<div class="gallery-empty">Could not load gallery.</div>'; return; }
     const { refs, generated } = await res.json();
+    galleryImageUrls = [...generated.map(g => g.url), ...refs.map(r => r.url)];
     let html = '';
     if (generated.length) {
       html += '<div class="gallery-section-label">Previously Generated</div>';
@@ -965,30 +957,42 @@
       html += '<div class="gallery-section-label">Reference Photos</div>';
       refs.forEach(r => { html += `<div class="gallery-thumb" onclick="pickGalleryImage('${r.url}', this)"><img src="${r.url}" alt=""></div>`; });
     }
-    if (!html) html = '<div class="gallery-empty">No saved images yet.</div>';
+    if (!html) html = '<div class="gallery-empty">No saved images yet — generate one or upload to /public/harold-refs/</div>';
     grid.innerHTML = html;
     galleryLoaded = true;
+  }
+
+  // Programmatic pick (used by auto-generate when nothing is selected)
+  async function autoPickFirstGalleryImage() {
+    if (!galleryLoaded) await loadGallery();
+    if (!galleryImageUrls.length) return false;
+    const firstThumb = document.querySelector('.gallery-thumb');
+    if (!firstThumb) return false;
+    await pickGalleryImage(galleryImageUrls[0], firstThumb);
+    return true;
   }
 
   async function pickGalleryImage(url, el) {
     document.querySelectorAll('.gallery-thumb').forEach(t => t.classList.remove('selected'));
     el.classList.add('selected');
-    // Convert URL to base64 data URL so it can be sent to generate-video
     const r = await fetch(url);
     const blob = await r.blob();
-    const reader = new FileReader();
-    reader.onload = () => {
-      state.imageData       = reader.result;
-      state.imageFromGallery = true;
-      state.scene           = '';
-      document.getElementById('image-preview').innerHTML =
-        `<img src="${reader.result}" alt="Selected from gallery" /><div class="scene-label">From gallery</div>`;
-      document.getElementById('btn-save-image').style.display = 'none';
-      document.getElementById('status-image').textContent = '✓ Photo selected from gallery'; document.getElementById('status-image').className = 'status-line ok';
-      dot('image', true);
-      checkVideoReady();
-    };
-    reader.readAsDataURL(blob);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    state.imageData        = dataUrl;
+    state.imageFromGallery = true;
+    state.scene            = '';
+    document.getElementById('image-preview').innerHTML =
+      `<img src="${dataUrl}" alt="Selected from gallery" /><div class="scene-label">From gallery</div>`;
+    document.getElementById('btn-save-image').style.display = 'none';
+    const statusEl = document.getElementById('status-image');
+    statusEl.textContent = '✓ Photo selected from gallery'; statusEl.className = 'status-line ok';
+    dot('image', true);
+    checkVideoReady();
   }
 
   async function saveImageToGallery() {
@@ -1003,7 +1007,8 @@
     btn.disabled = false;
     if (!res || !res.ok) { btn.textContent = '💾 Save failed'; return; }
     btn.textContent = '✓ Saved!';
-    galleryLoaded = false; // refresh next open
+    galleryLoaded = false;
+    loadGallery().catch(() => {}); // refresh the visible gallery so the new image shows immediately
     setTimeout(() => { btn.textContent = '💾 Save to Gallery'; }, 2000);
   }
 
@@ -1118,8 +1123,12 @@
           ? generateCallerAudio() : Promise.resolve(),
         !state.haroldAudioData ? generateHaroldAudio() : Promise.resolve(),
       ]);
-      // 4. Image (skip if already chosen from gallery)
-      if (!state.imageData) await generateImage();
+      // 4. Image — prefer a gallery photo (you've pre-uploaded reference shots),
+      //    only generate a new one if the gallery is empty.
+      if (!state.imageData) {
+        const picked = await autoPickFirstGalleryImage();
+        if (!picked) await generateImage();
+      }
       // 5. Caption
       if (!state.postText) await generatePost();
       btn.textContent = '✓ Done — review & download';
@@ -1332,6 +1341,8 @@
     await loadCallContext();
     loadDraft();
     applyPendingVoice();
+    // Load gallery in the background — gallery-first is the default for image step
+    loadGallery().catch(() => {});
   })();
 </script>
 </body>
