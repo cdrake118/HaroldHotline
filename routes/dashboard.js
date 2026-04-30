@@ -180,25 +180,25 @@ router.post('/api/wisdoms/generate', adminAuth, async (req, res) => {
           `Each entry is a single self-contained piece of advice, 1-2 sentences. Harold's voice: direct, slightly smug, unexpectedly profound. ` +
           `Vary the topics — consider sleep, food, territory, trust, presence, routine, observation, independence, contentment, warmth, patience. ` +
           `Do NOT reference sunbeams. ` +
-          `Return ONLY a valid JSON array of strings, nothing else.`,
+          `Return JSON in this exact shape: {"wisdoms": ["…", "…"]} — an object with a "wisdoms" array of strings.`,
       }],
       max_tokens: 2000,
+      response_format: { type: 'json_object' },
     });
-    const raw = completion.choices[0].message.content.trim();
-    const lines = JSON.parse(raw);
+    const raw    = completion.choices[0].message.content.trim();
+    const parsed = JSON.parse(raw);
+    const lines  = Array.isArray(parsed.wisdoms) ? parsed.wisdoms : [];
     let added = 0;
-    if (Array.isArray(lines)) {
-      for (const text of lines) {
-        if (typeof text === 'string' && text.trim()) {
-          const result = db.insertWisdom(text.trim(), 'ai');
-          if (result.changes) added++;
-        }
+    for (const text of lines) {
+      if (typeof text === 'string' && text.trim()) {
+        const result = db.insertWisdom(text.trim(), 'ai');
+        if (result.changes) added++;
       }
     }
     res.json({ added, total: db.getWisdomCount() });
   } catch (err) {
     console.error('Wisdom generate error:', err);
-    res.status(500).json({ error: 'Failed to generate wisdoms' });
+    res.status(500).json({ error: err.message || 'Failed to generate wisdoms' });
   }
 });
 
