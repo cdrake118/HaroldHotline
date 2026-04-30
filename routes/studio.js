@@ -102,6 +102,19 @@ function runFfmpegProgress(args, totalSecs, onPct) {
   });
 }
 
+// Returns duration of a media file in seconds, parsed from ffmpeg's stderr.
+// Avoids depending on ffprobe — some ffmpeg builds (e.g. headless variants) ship without it.
+async function getMediaDuration(file) {
+  try {
+    // ffmpeg with -i and no output exits non-zero, but always prints "Duration:" to stderr
+    await execFileAsync('ffmpeg', ['-hide_banner', '-i', file]);
+  } catch (err) {
+    const m = (err.stderr || '').match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    if (m) return parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseFloat(m[3]);
+  }
+  return 0;
+}
+
 // ── Studio page ───────────────────────────────────────────────────────────────
 router.get('/', pageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'studio.html'));
@@ -485,15 +498,13 @@ async function runVideoJob(job, body) {
     let callerDur = 0;
     if (hasCallerAudio) {
       setProgress(14, 'Measuring audio…');
-      const { stdout } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', tmpCaller]);
-      callerDur = parseFloat(stdout.trim()) || 0;
+      callerDur = await getMediaDuration(tmpCaller);
     }
 
     const hasRing = includeRing && fs.existsSync(ringAudioPath);
     let ringDur = 0;
     if (hasRing) {
-      const { stdout: rOut } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', ringAudioPath]);
-      ringDur = parseFloat(rOut.trim()) || 0;
+      ringDur = await getMediaDuration(ringAudioPath);
     }
 
     setProgress(18, 'Combining audio…');
@@ -522,8 +533,7 @@ async function runVideoJob(job, body) {
     }
 
     setProgress(20, 'Starting encode…');
-    const { stdout: durOut } = await execFileAsync('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioFile]);
-    const totalSecs = parseFloat(durOut.trim()) || 0;
+    const totalSecs = await getMediaDuration(audioFile);
 
     const callerStart  = ringDur;
     const callerEnd    = ringDur + callerDur;
