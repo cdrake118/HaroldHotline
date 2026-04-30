@@ -25,6 +25,7 @@ app.use('/audio', express.static(audioDir, { maxAge: STATIC_MAX_AGE, immutable: 
 // Reference photos & gallery: long cache (filenames change when content changes)
 app.use('/harold-refs',    express.static(path.join(__dirname, 'public', 'harold-refs'),    { maxAge: STATIC_MAX_AGE }));
 app.use('/harold-gallery', express.static(path.join(__dirname, 'public', 'harold-gallery'), { maxAge: STATIC_MAX_AGE }));
+app.use('/harold-badges',  express.static(path.join(__dirname, 'public', 'harold-badges'),  { maxAge: STATIC_MAX_AGE }));
 
 // Serve other static assets (favicon, etc.)
 app.use(express.static(path.join(__dirname, 'public')));

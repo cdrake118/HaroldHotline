@@ -235,6 +235,27 @@
     .video-options label { display: flex; align-items: center; gap: 6px; font-size: .83rem; cursor: pointer; }
     .video-options input[type=radio], .video-options input[type=checkbox] { accent-color: var(--amber); }
 
+    .badge-block {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; margin-bottom: 14px;
+    }
+    .badge-block .badge-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .badge-block select {
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: .35rem .55rem; font-size: .85rem; font-family: inherit;
+    }
+    .badge-block select:focus { outline: none; border-color: var(--amber); }
+    .badge-sliders {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin-top: 12px;
+    }
+    .badge-slider {
+      display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted);
+    }
+    .badge-slider label { min-width: 70px; }
+    .badge-slider input[type=range] { flex: 1; accent-color: var(--amber); }
+    .badge-slider .val { min-width: 42px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+    @media(max-width: 540px) { .badge-sliders { grid-template-columns: 1fr; } }
+
     .video-preview-wrap { margin-top: 14px; }
     .video-preview-wrap video {
       max-width: 320px; max-height: 480px; border-radius: 8px;
@@ -492,6 +513,22 @@
       <label style="margin-left:auto"><input type="checkbox" id="include-captions" checked> 💬 Captions</label>
       <label><input type="checkbox" id="include-ring"> 📞 Phone ring intro</label>
     </div>
+    <div class="badge-block">
+      <div class="badge-row">
+        <label style="font-size:.85rem">🏷 Badge:
+          <select id="badge-select" onchange="onBadgeChange()">
+            <option value="">— none (haroldshotline.com text) —</option>
+          </select>
+        </label>
+        <img id="badge-preview" alt="" style="display:none;height:36px;border-radius:4px;background:rgba(255,255,255,.04);padding:3px">
+      </div>
+      <div class="badge-sliders" id="badge-sliders" style="display:none">
+        <div class="badge-slider"><label>Position X</label><input type="range" id="badge-x" min="0" max="100" value="50"><span class="val" id="badge-x-val">50%</span></div>
+        <div class="badge-slider"><label>Position Y</label><input type="range" id="badge-y" min="0" max="100" value="15"><span class="val" id="badge-y-val">15%</span></div>
+        <div class="badge-slider"><label>Size</label><input type="range" id="badge-size" min="5" max="60" value="25"><span class="val" id="badge-size-val">25%</span></div>
+        <div class="badge-slider"><label>Rotation</label><input type="range" id="badge-rot" min="-180" max="180" value="0"><span class="val" id="badge-rot-val">0°</span></div>
+      </div>
+    </div>
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
     </div>
@@ -618,6 +655,8 @@
     dot('harold-audio', false);
     dot('script', false);
     updateGenerateButtons();
+    // Re-suggest badge for the new mode
+    if (typeof suggestBadgeIfUntouched === 'function') suggestBadgeIfUntouched();
   }
 
   function applyModeUI() {
@@ -693,6 +732,79 @@
     const intro = pickWisdomIntro();
     document.getElementById('harold-response').value = `${intro} ${state.wisdomText}`;
     state.haroldResponse = document.getElementById('harold-response').value;
+  }
+
+  // -- Badge overlay -------------------------------------------------------------
+  let availableBadges = []; // [{ name, label, url }]
+
+  // Suggest a badge based on the current mode + call type so the user usually
+  // doesn't need to think about this. They can always override the dropdown.
+  function suggestedBadgeName() {
+    if (isWisdomMode()) return 'wisdom';
+    const callType = state.callContext?.call_type || document.getElementById('call-type')?.value;
+    return ({ confession: 'confession', advice: 'advice', question: 'question',
+              wisdom: 'wisdom', speak: 'chat' })[callType] || '';
+  }
+
+  async function loadBadges() {
+    const sel = document.getElementById('badge-select');
+    const res = await adminFetch('/studio/api/badges');
+    if (!res || !res.ok) return;
+    const { badges } = await res.json();
+    availableBadges = badges || [];
+    sel.innerHTML = '<option value="">— none (haroldshotline.com text) —</option>' +
+      availableBadges.map(b => `<option value="${b.name}">${escapeHtml(b.label)}</option>`).join('');
+    suggestBadgeIfUntouched();
+  }
+
+  // Updates preview + slider visibility based on the current dropdown value.
+  // Does not mutate userTouched — that's reserved for the human change event.
+  function applyBadgeUI() {
+    const sel     = document.getElementById('badge-select');
+    const name    = sel.value;
+    const sliders = document.getElementById('badge-sliders');
+    const preview = document.getElementById('badge-preview');
+    if (!name) {
+      sliders.style.display = 'none';
+      preview.style.display = 'none';
+      return;
+    }
+    const b = availableBadges.find(x => x.name === name);
+    if (b) { preview.src = b.url; preview.style.display = 'block'; }
+    sliders.style.display = 'grid';
+  }
+
+  // Auto-pick a sensible badge based on current mode/call-type. Skipped once
+  // the user has manually changed the dropdown (userTouched flag).
+  function suggestBadgeIfUntouched() {
+    const sel = document.getElementById('badge-select');
+    if (sel.dataset.userTouched) return;
+    const suggested = suggestedBadgeName();
+    sel.value = suggested && availableBadges.find(b => b.name === suggested) ? suggested : '';
+    applyBadgeUI();
+  }
+
+  function onBadgeChange() {
+    document.getElementById('badge-select').dataset.userTouched = '1';
+    applyBadgeUI();
+  }
+
+  // Live-update the slider value labels so the user can see what they're picking
+  function bindBadgeSliders() {
+    const pairs = [
+      ['badge-x',   'badge-x-val',   v => `${v}%`],
+      ['badge-y',   'badge-y-val',   v => `${v}%`],
+      ['badge-size','badge-size-val',v => `${v}%`],
+      ['badge-rot', 'badge-rot-val', v => `${v}°`],
+    ];
+    pairs.forEach(([inputId, labelId, fmt]) => {
+      const el = document.getElementById(inputId);
+      const lbl = document.getElementById(labelId);
+      if (!el || !lbl) return;
+      const update = () => { lbl.textContent = fmt(el.value); };
+      el.addEventListener('input', update);
+      update();
+    });
   }
 
   function dot(id, done) {
@@ -1026,6 +1138,11 @@
       aspectRatio:     document.querySelector('input[name="aspect"]:checked')?.value || '1:1',
       includeRing:     document.getElementById('include-ring').checked,
       includeCaptions: document.getElementById('include-captions').checked,
+      badge:           document.getElementById('badge-select').value || null,
+      badgeX:          parseInt(document.getElementById('badge-x').value, 10),
+      badgeY:          parseInt(document.getElementById('badge-y').value, 10),
+      badgeSize:       parseInt(document.getElementById('badge-size').value, 10),
+      badgeRotation:   parseInt(document.getElementById('badge-rot').value, 10),
     };
     if (state.useRecording && state.callContext?.id) {
       body.useRecording = true;
@@ -1574,6 +1691,7 @@
       state.postText = e.target.value;
       updatePostCharCount();
     });
+    document.getElementById('call-type').addEventListener('change', suggestBadgeIfUntouched);
     attachDraftListeners();
   });
 
@@ -1587,9 +1705,11 @@
     applyPendingVoice();
     // Apply initial mode UI (so wisdom-only elements are hidden in default synthetic mode)
     applyModeUI();
-    // Load gallery + wisdom list in the background
+    bindBadgeSliders();
+    // Load gallery + wisdoms + badges in the background
     loadGallery().catch(() => {});
     loadWisdomList().catch(() => {});
+    loadBadges().catch(() => {});
   })();
 </script>
 </body>

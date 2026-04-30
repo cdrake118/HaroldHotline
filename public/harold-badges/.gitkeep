@@ -1,0 +1,9 @@
+Badge images for video overlays. Drop PNG/JPG/WEBP files here named:
+  confession.{png,jpg,webp}   — Confession
+  chat.{png,jpg,webp}         — Chat with Harold
+  wisdom.{png,jpg,webp}       — Harold Wisdom
+  advice.{png,jpg,webp}       — Harold Advice
+  question.{png,jpg,webp}     — Question for Harold
+
+PNG with transparency is recommended so the badge composites cleanly.
+Studio's Step 5 picks one of these by name and overlays it on the video.

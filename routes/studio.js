@@ -14,6 +14,18 @@ const { adminAuth, pageAuth } = require('../middleware/auth');
 
 const HAROLD_REFS_DIR     = path.join(__dirname, '..', 'public', 'harold-refs');
 const HAROLD_GALLERY_DIR  = path.join(__dirname, '..', 'public', 'harold-gallery');
+const HAROLD_BADGES_DIR   = path.join(__dirname, '..', 'public', 'harold-badges');
+
+// Whitelist badge names to prevent any path-traversal funny business via the body.
+const VALID_BADGE_NAMES = new Set(['confession', 'chat', 'wisdom', 'advice', 'question']);
+function findBadgeFile(name) {
+  if (!name || !VALID_BADGE_NAMES.has(name)) return null;
+  for (const ext of ['png', 'webp', 'jpg', 'jpeg']) {
+    const p = path.join(HAROLD_BADGES_DIR, `${name}.${ext}`);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 // Cache ElevenLabs voices for 1 hour to avoid a fresh API call on every studio load
 const voicesCache = { voices: null, ts: 0 };
@@ -152,6 +164,26 @@ router.get('/api/call/:id', adminAuth, (req, res) => {
   if (!call) return res.status(404).json({ error: 'Not found' });
   const { id, caller_number, call_type, created_at, transcript, wisdom_text, harold_response, recording_url, recording_sid } = call;
   res.json({ call: { id, caller_number, call_type, created_at, transcript, wisdom_text, harold_response, hasRecording: !!recording_url, recording_sid } });
+});
+
+// ── List which badge overlays are actually available on disk ────────────────
+router.get('/api/badges', adminAuth, (req, res) => {
+  const badgeLabels = {
+    confession: 'Confession',
+    chat:       'Chat with Harold',
+    wisdom:     'Harold Wisdom',
+    advice:     'Harold Advice',
+    question:   'Question for Harold',
+  };
+  const badges = [];
+  for (const [name, label] of Object.entries(badgeLabels)) {
+    const file = findBadgeFile(name);
+    if (file) {
+      const ext = path.extname(file).slice(1);
+      badges.push({ name, label, url: `/harold-badges/${name}.${ext}` });
+    }
+  }
+  res.json({ badges });
 });
 
 // ── List wisdoms for the studio's wisdom-video mode ──────────────────────────
@@ -511,7 +543,8 @@ router.get('/api/video-progress/:jobId', adminAuth, (req, res) => {
 async function runVideoJob(job, body) {
   const { imageData, callerAudioData, haroldAudioData, callerText, haroldText,
           useRecording, callId, aspectRatio = '1:1', includeRing = false,
-          includeCaptions = true } = body;
+          includeCaptions = true,
+          badge = null, badgeX = 50, badgeY = 15, badgeSize = 25, badgeRotation = 0 } = body;
   const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
 
   function setProgress(pct, msg) { job.pct = pct; if (msg) job.msg = msg; }
@@ -594,17 +627,56 @@ async function runVideoJob(job, body) {
       ...buildTimedCaptions(haroldText_q, haroldStart, totalSecs),
     ] : [];
 
-    const watermark = `drawtext=text='haroldshotline.com':x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
-
     const [W, H] = aspectRatio === '9:16' ? [1080, 1920] : [1080, 1080];
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
-    // Build filter chain by joining only the non-empty parts so we don't end up
-    // with a trailing comma when captions are disabled (ffmpeg would reject it).
-    const vf = [scaleCrop, watermark, ...allCaptionFilters].join(',');
+
+    // Resolve the badge — if it exists on disk, overlay it instead of the text watermark.
+    const badgeFile = findBadgeFile(badge);
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v) || 0));
+
+    const ffmpegArgs = ['-loop', '1', '-i', tmpImg, '-i', audioFile];
+    if (badgeFile) ffmpegArgs.push('-loop', '1', '-i', badgeFile);
+
+    const captionsChain = allCaptionFilters.join(',');
+
+    let filterArg;
+    if (badgeFile) {
+      // Badge overlay path — uses filter_complex with the badge as input [2:v].
+      // Order: scale image → scale badge to size → optional rotate (canvas grows
+      // to fit) → overlay at (x,y) with badge centered on that point → captions.
+      const sizePct = clamp(badgeSize, 5, 60);
+      const rotDeg  = clamp(badgeRotation, -180, 180);
+      const xPct    = clamp(badgeX, 0, 100);
+      const yPct    = clamp(badgeY, 0, 100);
+      const badgeW  = Math.floor(W * sizePct / 100);
+      const xPx     = Math.floor(W * xPct / 100);
+      const yPx     = Math.floor(H * yPct / 100);
+      const rotRad  = (rotDeg * Math.PI / 180).toFixed(4);
+
+      const rotateFilter = rotDeg === 0
+        ? ''
+        : `,rotate=${rotRad}:c=none@0:ow=rotw(${rotRad}):oh=roth(${rotRad})`;
+
+      const chains = [
+        `[0:v]${scaleCrop}[base]`,
+        `[2:v]scale=${badgeW}:-1${rotateFilter}[badge]`,
+        `[base][badge]overlay=${xPx}-overlay_w/2:${yPx}-overlay_h/2${captionsChain ? '[withbadge]' : '[v]'}`,
+      ];
+      if (captionsChain) {
+        chains.push(`[withbadge]${captionsChain}[v]`);
+      }
+      filterArg = chains.join(';');
+    } else {
+      // No badge — keep the original text watermark + optional captions.
+      const watermark = `drawtext=text='haroldshotline.com':x=(w-text_w)/2:y=36:fontsize=30:fontcolor=white@0.85:shadowcolor=black@0.5:shadowx=1:shadowy=1`;
+      const chain = [scaleCrop, watermark, ...allCaptionFilters].filter(Boolean).join(',');
+      filterArg = `[0:v]${chain}[v]`;
+    }
 
     await runFfmpegProgress([
-      '-loop', '1', '-i', tmpImg, '-i', audioFile,
-      '-vf', vf,
+      ...ffmpegArgs,
+      '-filter_complex', filterArg,
+      '-map', '[v]', '-map', '1:a',
       '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k',
       '-shortest',
