@@ -1672,7 +1672,10 @@
         haroldResponse: document.getElementById('harold-response').value,
         voiceId:        document.getElementById('caller-voice-select').value,
         postText:       document.getElementById('post-text').value,
-        useRecording:   state.useRecording,
+        // useRecording is intentionally not persisted — it's a per-session choice,
+        // re-established by loadCallContext (recording auto-default for calls
+        // that have one). Persisting it caused stale drafts to silently force
+        // useRecording=false after refresh, breaking the Generate Video button.
       };
       // Only persist if there's something worth saving
       const meaningful = draft.callerScript || draft.haroldResponse || draft.scenario || draft.postText;
@@ -1706,7 +1709,8 @@
       state.callerScript    = d.callerScript || null;
       state.haroldResponse  = d.haroldResponse || null;
       state.postText        = d.postText || null;
-      state.useRecording    = !!d.useRecording;
+      // Don't restore useRecording from draft — it's set by loadCallContext
+      // for calls that have a recording, and stale drafts would override it.
       if (state.callerScript || state.haroldResponse) {
         document.getElementById('script-area').style.display = 'grid';
       }
