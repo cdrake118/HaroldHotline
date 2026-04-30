@@ -256,6 +256,27 @@
     .badge-slider .val { min-width: 42px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
     @media(max-width: 540px) { .badge-sliders { grid-template-columns: 1fr; } }
 
+    /* Live preview canvas — shows badge composited over current image at chosen
+       aspect. Mirrors the ffmpeg placement (badge center anchored at x/y, size
+       as % of width, rotation in degrees with canvas growing to fit). */
+    .badge-preview-canvas {
+      position: relative; width: 100%; max-width: 240px;
+      aspect-ratio: 9 / 16;
+      background: #000; border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; margin: 12px auto 0;
+    }
+    .badge-preview-canvas.square { aspect-ratio: 1 / 1; }
+    #bpc-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #bpc-badge { position: absolute; pointer-events: none; user-select: none; transform-origin: center center; }
+    #bpc-empty {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: .8rem; text-align: center; padding: 12px;
+    }
+    #bpc-watermark {
+      position: absolute; left: 0; right: 0; top: 8px; text-align: center;
+      color: rgba(255,255,255,.85); font-size: .7rem; text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    }
+
     .video-preview-wrap { margin-top: 14px; }
     .video-preview-wrap video {
       max-width: 320px; max-height: 480px; border-radius: 8px;
@@ -528,6 +549,11 @@
         <div class="badge-slider"><label>Size</label><input type="range" id="badge-size" min="5" max="60" value="25"><span class="val" id="badge-size-val">25%</span></div>
         <div class="badge-slider"><label>Rotation</label><input type="range" id="badge-rot" min="-180" max="180" value="0"><span class="val" id="badge-rot-val">0°</span></div>
       </div>
+      <div class="badge-preview-canvas" id="badge-preview-canvas" style="display:none">
+        <img id="bpc-image" alt="">
+        <img id="bpc-badge" alt="">
+        <div id="bpc-empty">Pick a photo in step 4 to preview placement</div>
+      </div>
     </div>
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
@@ -767,11 +793,13 @@
     if (!name) {
       sliders.style.display = 'none';
       preview.style.display = 'none';
+      renderBadgePreview();
       return;
     }
     const b = availableBadges.find(x => x.name === name);
     if (b) { preview.src = b.url; preview.style.display = 'block'; }
     sliders.style.display = 'grid';
+    renderBadgePreview();
   }
 
   // Auto-pick a sensible badge based on current mode/call-type. Skipped once
@@ -789,6 +817,37 @@
     applyBadgeUI();
   }
 
+  // Live preview — mirrors the ffmpeg overlay placement using CSS transforms.
+  // Updates whenever the badge, image, sliders, or aspect ratio change.
+  function renderBadgePreview() {
+    const sel    = document.getElementById('badge-select');
+    const canvas = document.getElementById('badge-preview-canvas');
+    if (!sel.value) { canvas.style.display = 'none'; return; }
+    canvas.style.display = 'block';
+    const aspect = document.querySelector('input[name="aspect"]:checked')?.value || '9:16';
+    canvas.classList.toggle('square', aspect === '1:1');
+
+    const img    = document.getElementById('bpc-image');
+    const badge  = document.getElementById('bpc-badge');
+    const empty  = document.getElementById('bpc-empty');
+    if (state.imageData) {
+      img.src = state.imageData;
+      img.style.display = 'block';
+      empty.style.display = 'none';
+    } else {
+      img.style.display = 'none';
+      empty.style.display = 'flex';
+    }
+    const b = availableBadges.find(x => x.name === sel.value);
+    if (!b) { badge.style.display = 'none'; return; }
+    badge.src = b.url;
+    badge.style.display = 'block';
+    badge.style.left   = `${parseInt(document.getElementById('badge-x').value, 10)}%`;
+    badge.style.top    = `${parseInt(document.getElementById('badge-y').value, 10)}%`;
+    badge.style.width  = `${parseInt(document.getElementById('badge-size').value, 10)}%`;
+    badge.style.transform = `translate(-50%, -50%) rotate(${parseInt(document.getElementById('badge-rot').value, 10)}deg)`;
+  }
+
   // Live-update the slider value labels so the user can see what they're picking
   function bindBadgeSliders() {
     const pairs = [
@@ -801,9 +860,13 @@
       const el = document.getElementById(inputId);
       const lbl = document.getElementById(labelId);
       if (!el || !lbl) return;
-      const update = () => { lbl.textContent = fmt(el.value); };
+      const update = () => { lbl.textContent = fmt(el.value); renderBadgePreview(); };
       el.addEventListener('input', update);
       update();
+    });
+    // Re-render when aspect ratio changes (preview canvas swaps shape)
+    document.querySelectorAll('input[name="aspect"]').forEach(r => {
+      r.addEventListener('change', renderBadgePreview);
     });
   }
 
@@ -1096,6 +1159,7 @@
     document.getElementById('btn-save-image').style.display = 'inline-flex';
     dot('image', true);
     checkVideoReady();
+    renderBadgePreview();
     status.textContent = '✓ Photo generated'; status.className = 'status-line ok';
   }
 
@@ -1325,6 +1389,7 @@
     statusEl.textContent = '✓ Photo selected from gallery'; statusEl.className = 'status-line ok';
     dot('image', true);
     checkVideoReady();
+    renderBadgePreview();
   }
 
   async function saveImageToGallery() {
