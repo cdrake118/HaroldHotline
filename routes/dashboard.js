@@ -65,6 +65,7 @@ router.get('/api/analytics', adminAuth, (req, res) => {
       daily:     db.analyticsDaily(),
       referrers: db.analyticsReferrers(),
       devices:   db.analyticsDevices(),
+      countries: db.analyticsCountries(),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

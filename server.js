@@ -92,18 +92,43 @@ function detectDevice(ua) {
   return 'desktop';
 }
 
-// Landing page view tracking — no PII stored, bots filtered
-app.post('/api/track', (req, res) => {
+// Landing page view tracking — no raw IPs stored, bots filtered
+app.post('/api/track', async (req, res) => {
   res.sendStatus(200);
   try {
     const ua = req.headers['user-agent'] || '';
     if (/bot|crawl|spider|slurp|facebookexternalhit|preview|headless/i.test(ua)) return;
+
     const ref = req.body.referrer || req.headers.referer || '';
     let domain = 'direct';
     if (ref) {
       try { domain = new URL(ref).hostname.replace(/^www\./, '') || 'direct'; } catch (_) {}
     }
-    db.insertPageView(domain, detectDevice(ua));
+
+    // Geo lookup — runs after 200 response, never blocks the user
+    let country = null, city = null;
+    const rawIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                  || req.socket?.remoteAddress || '';
+    const ip = rawIp.replace(/^::ffff:/, '').trim();
+    const isPrivate = !ip || ip === '127.0.0.1' || ip === '::1'
+                      || ip.startsWith('10.') || ip.startsWith('192.168.')
+                      || ip.startsWith('172.');
+    if (!isPrivate) {
+      try {
+        const geoRes = await fetch(`https://ipinfo.io/${ip}/json`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (geoRes.ok) {
+          const geo = await geoRes.json();
+          if (!geo.bogon) {
+            country = geo.country || null;
+            city    = geo.city    || null;
+          }
+        }
+      } catch (_) {}
+    }
+
+    db.insertPageView(domain, detectDevice(ua), country, city);
   } catch (_) {}
 });
 

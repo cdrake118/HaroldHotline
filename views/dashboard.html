@@ -641,10 +641,19 @@
         </table>
       </div>
     </div>
-    <div style="margin-top:1rem">
-      <div class="analytics-sub-title">Devices</div>
-      <div class="device-chips" id="device-breakdown">
-        <span style="color:var(--muted);font-size:.82rem;font-style:italic">Loading…</span>
+    <div class="analytics-charts-row" style="margin-top:1.25rem">
+      <div class="analytics-chart-wrap">
+        <div class="analytics-sub-title">Top Countries</div>
+        <table class="referrer-table">
+          <thead><tr><th>Country</th><th>Visits</th></tr></thead>
+          <tbody id="countries-body"><tr><td colspan="2" style="color:var(--muted);font-style:italic;font-size:.8rem">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="analytics-chart-wrap">
+        <div class="analytics-sub-title">Devices</div>
+        <div class="device-chips" id="device-breakdown">
+          <span style="color:var(--muted);font-size:.82rem;font-style:italic">Loading…</span>
+        </div>
       </div>
     </div>
   </div>
@@ -1335,10 +1344,30 @@
     if (showing && !analyticsLoaded) loadAnalytics();
   }
 
+  function countryFlag(code) {
+    if (!code || code.length !== 2) return '';
+    return String.fromCodePoint(
+      0x1F1E6 + code.toUpperCase().charCodeAt(0) - 65,
+      0x1F1E6 + code.toUpperCase().charCodeAt(1) - 65
+    );
+  }
+
+  const COUNTRY_NAMES = {
+    AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AR:'Argentina',AU:'Australia',AT:'Austria',
+    BE:'Belgium',BR:'Brazil',BG:'Bulgaria',CA:'Canada',CL:'Chile',CN:'China',CO:'Colombia',
+    HR:'Croatia',CZ:'Czechia',DK:'Denmark',EG:'Egypt',FI:'Finland',FR:'France',DE:'Germany',
+    GH:'Ghana',GR:'Greece',HU:'Hungary',IN:'India',ID:'Indonesia',IE:'Ireland',IL:'Israel',
+    IT:'Italy',JP:'Japan',KE:'Kenya',MY:'Malaysia',MX:'Mexico',NL:'Netherlands',NZ:'New Zealand',
+    NG:'Nigeria',NO:'Norway',PK:'Pakistan',PE:'Peru',PH:'Philippines',PL:'Poland',PT:'Portugal',
+    RO:'Romania',RU:'Russia',SA:'Saudi Arabia',RS:'Serbia',SG:'Singapore',ZA:'South Africa',
+    KR:'South Korea',ES:'Spain',SE:'Sweden',CH:'Switzerland',TH:'Thailand',TR:'Turkey',
+    UA:'Ukraine',AE:'UAE',GB:'United Kingdom',US:'United States',VN:'Vietnam',
+  };
+
   async function loadAnalytics() {
     const res = await adminFetch('/dashboard/api/analytics');
     if (!res || !res.ok) return;
-    const { overview, daily, referrers, devices } = await res.json();
+    const { overview, daily, referrers, devices, countries } = await res.json();
     analyticsLoaded = true;
 
     document.getElementById('an-total-views').textContent = (overview.total_views  || 0).toLocaleString();
@@ -1409,6 +1438,20 @@
             <span class="dc-val">${d.count.toLocaleString()}</span>
           </div>`).join('')
       : '<span style="color:var(--muted);font-size:.82rem;font-style:italic">No data yet</span>';
+
+    // Countries
+    const maxCountry = countries.length ? countries[0].count : 1;
+    document.getElementById('countries-body').innerHTML = countries.length
+      ? countries.map(c => {
+          const name = COUNTRY_NAMES[c.country] || c.country;
+          const flag = countryFlag(c.country);
+          const barW = Math.round((c.count / maxCountry) * 60);
+          return `<tr>
+            <td>${flag} ${escapeHtml(name)}</td>
+            <td>${c.count.toLocaleString()}<span class="ref-bar" style="width:${barW}px"></span></td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="2" style="color:var(--muted);font-style:italic;font-size:.8rem">No data yet — new visits will show here</td></tr>';
   }
 
   // Manual refresh only — auto-refresh disabled to avoid interrupting in-progress actions.

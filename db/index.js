@@ -89,6 +89,8 @@ db.exec(`
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN harold_response TEXT`); } catch (_) {}
+try { db.exec(`ALTER TABLE page_views ADD COLUMN country TEXT`); } catch (_) {}
+try { db.exec(`ALTER TABLE page_views ADD COLUMN city TEXT`); } catch (_) {}
 
 const stmts = {
   upsertCall: db.prepare(`
@@ -201,8 +203,8 @@ const stmts = {
 
   // Analytics
   insertPageView: db.prepare(`
-    INSERT INTO page_views (ts, referrer, device)
-    VALUES (CAST(strftime('%s','now') AS INTEGER), ?, ?)
+    INSERT INTO page_views (ts, referrer, device, country, city)
+    VALUES (CAST(strftime('%s','now') AS INTEGER), ?, ?, ?, ?)
   `),
   insertLinkClick: db.prepare(`
     INSERT INTO link_clicks (ts, type)
@@ -239,6 +241,14 @@ const stmts = {
     FROM page_views
     GROUP BY device
     ORDER BY count DESC
+  `),
+  analyticsCountries: db.prepare(`
+    SELECT country, COUNT(*) as count
+    FROM page_views
+    WHERE country IS NOT NULL
+    GROUP BY country
+    ORDER BY count DESC
+    LIMIT 20
   `),
 };
 
@@ -385,10 +395,11 @@ module.exports = {
   insertWisdom:   (text, source) => stmts.insertWisdom.run({ text, source }),
 
   // Analytics
-  insertPageView:     (referrer, device) => stmts.insertPageView.run(referrer || 'direct', device || 'unknown'),
+  insertPageView:     (referrer, device, country, city) => stmts.insertPageView.run(referrer || 'direct', device || 'unknown', country || null, city || null),
   insertLinkClick:    (type)             => stmts.insertLinkClick.run(type || 'phone'),
   analyticsOverview:  ()                 => stmts.analyticsOverview.get(),
   analyticsDaily:     ()                 => stmts.analyticsDaily.all(),
   analyticsReferrers: ()                 => stmts.analyticsReferrers.all(),
   analyticsDevices:   ()                 => stmts.analyticsDevices.all(),
+  analyticsCountries: ()                 => stmts.analyticsCountries.all(),
 };
