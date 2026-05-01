@@ -85,6 +85,38 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
+function detectDevice(ua) {
+  if (!ua) return 'desktop';
+  if (/ipad|tablet/i.test(ua)) return 'tablet';
+  if (/mobile|android|iphone|ipod|blackberry|windows phone/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+// Landing page view tracking — no PII stored, bots filtered
+app.post('/api/track', (req, res) => {
+  res.sendStatus(200);
+  try {
+    const ua = req.headers['user-agent'] || '';
+    if (/bot|crawl|spider|slurp|facebookexternalhit|preview|headless/i.test(ua)) return;
+    const ref = req.body.referrer || req.headers.referer || '';
+    let domain = 'direct';
+    if (ref) {
+      try { domain = new URL(ref).hostname.replace(/^www\./, '') || 'direct'; } catch (_) {}
+    }
+    db.insertPageView(domain, detectDevice(ua));
+  } catch (_) {}
+});
+
+// Phone number click tracking
+app.post('/api/track-click', (req, res) => {
+  res.sendStatus(200);
+  try {
+    const ua = req.headers['user-agent'] || '';
+    if (/bot|crawl|spider/i.test(ua)) return;
+    db.insertLinkClick(req.body.type || 'phone');
+  } catch (_) {}
+});
+
 // Public landing page
 app.get('/', (req, res) => {
   const template = fs.readFileSync(path.join(__dirname, 'views', 'landing.html'), 'utf8');

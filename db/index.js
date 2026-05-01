@@ -66,6 +66,25 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS page_views (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       INTEGER NOT NULL,
+    referrer TEXT,
+    device   TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS link_clicks (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts   INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'phone'
+  );
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_page_views_ts ON page_views(ts);
+`);
+
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
@@ -179,6 +198,48 @@ const stmts = {
   getWisdomCount: db.prepare(`SELECT COUNT(*) as count FROM wisdoms`),
   listWisdoms:    db.prepare(`SELECT id, text, source, created_at FROM wisdoms ORDER BY id DESC LIMIT @limit`),
   insertWisdom:   db.prepare(`INSERT OR IGNORE INTO wisdoms (text, source) VALUES (@text, @source)`),
+
+  // Analytics
+  insertPageView: db.prepare(`
+    INSERT INTO page_views (ts, referrer, device)
+    VALUES (CAST(strftime('%s','now') AS INTEGER), ?, ?)
+  `),
+  insertLinkClick: db.prepare(`
+    INSERT INTO link_clicks (ts, type)
+    VALUES (CAST(strftime('%s','now') AS INTEGER), ?)
+  `),
+  analyticsOverview: db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM page_views) as total_views,
+      (SELECT COUNT(*) FROM page_views
+        WHERE ts >= CAST(strftime('%s','now','-7 days') AS INTEGER)) as views_7d,
+      (SELECT COUNT(*) FROM page_views
+        WHERE ts >= CAST(strftime('%s','now','-30 days') AS INTEGER)) as views_30d,
+      (SELECT COUNT(*) FROM link_clicks WHERE type = 'phone') as total_clicks,
+      (SELECT COUNT(*) FROM link_clicks
+        WHERE type = 'phone'
+          AND ts >= CAST(strftime('%s','now','-30 days') AS INTEGER)) as clicks_30d
+  `),
+  analyticsDaily: db.prepare(`
+    SELECT date(ts, 'unixepoch') as day, COUNT(*) as count
+    FROM page_views
+    WHERE ts >= CAST(strftime('%s','now','-30 days') AS INTEGER)
+    GROUP BY day
+    ORDER BY day ASC
+  `),
+  analyticsReferrers: db.prepare(`
+    SELECT COALESCE(NULLIF(referrer,''), 'direct') as referrer, COUNT(*) as count
+    FROM page_views
+    GROUP BY referrer
+    ORDER BY count DESC
+    LIMIT 15
+  `),
+  analyticsDevices: db.prepare(`
+    SELECT COALESCE(device, 'unknown') as device, COUNT(*) as count
+    FROM page_views
+    GROUP BY device
+    ORDER BY count DESC
+  `),
 };
 
 // Dynamic query helpers (can't be pre-prepared due to variable WHERE clauses)
@@ -322,4 +383,12 @@ module.exports = {
   getWisdomCount: ()             => stmts.getWisdomCount.get().count,
   listWisdoms:    (limit = 500)  => stmts.listWisdoms.all({ limit }),
   insertWisdom:   (text, source) => stmts.insertWisdom.run({ text, source }),
+
+  // Analytics
+  insertPageView:     (referrer, device) => stmts.insertPageView.run(referrer || 'direct', device || 'unknown'),
+  insertLinkClick:    (type)             => stmts.insertLinkClick.run(type || 'phone'),
+  analyticsOverview:  ()                 => stmts.analyticsOverview.get(),
+  analyticsDaily:     ()                 => stmts.analyticsDaily.all(),
+  analyticsReferrers: ()                 => stmts.analyticsReferrers.all(),
+  analyticsDevices:   ()                 => stmts.analyticsDevices.all(),
 };

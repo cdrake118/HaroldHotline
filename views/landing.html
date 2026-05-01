@@ -474,6 +474,25 @@
     set('stat-wisdom',      s.wisdom_calls);
   }).catch(() => {});
 
+  // Track page view (fire-and-forget, no PII)
+  fetch('/api/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ referrer: document.referrer }),
+  }).catch(() => {});
+
+  // Track phone number tap/click
+  const phoneLink = document.querySelector('.phone-number');
+  if (phoneLink) {
+    phoneLink.addEventListener('click', () => {
+      fetch('/api/track-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'phone' }),
+      }).catch(() => {});
+    });
+  }
+
   // Populate SVG background: 40 scattered star dots
   const starsEl = document.getElementById('stars');
   for (let i = 0; i < 40; i++) {

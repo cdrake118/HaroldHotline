@@ -58,6 +58,19 @@ router.get('/api/stats/daily', adminAuth, (req, res) => {
   res.json(db.statsDaily());
 });
 
+router.get('/api/analytics', adminAuth, (req, res) => {
+  try {
+    res.json({
+      overview:  db.analyticsOverview(),
+      daily:     db.analyticsDaily(),
+      referrers: db.analyticsReferrers(),
+      devices:   db.analyticsDevices(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Search must be registered before /:id to avoid route conflict
 router.get('/api/calls/search', adminAuth, (req, res) => {
   const q = (req.query.q || '').trim();

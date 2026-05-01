@@ -286,6 +286,56 @@
     }
     .chart-body canvas { max-height: 220px; }
 
+    /* -- Analytics section ------------------------------------------------- */
+    .analytics-section { padding: 0 2rem 1.5rem; }
+    .analytics-body {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-top: .75rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .analytics-mini-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .75rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 640px) { .analytics-mini-stats { grid-template-columns: repeat(2, 1fr); } }
+    .analytics-mini-stat {
+      background: #fffbeb;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      text-align: center;
+    }
+    .analytics-mini-stat .a-value { font-size: 1.6rem; font-weight: 800; color: var(--amber-dk); line-height: 1.1; }
+    .analytics-mini-stat .a-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: .2rem; }
+    .analytics-charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 720px) { .analytics-charts-row { grid-template-columns: 1fr; } }
+    .analytics-sub-title { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .6rem; }
+    .analytics-chart-wrap { background: #fffbeb; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
+    .analytics-chart-wrap canvas { max-height: 160px; }
+    .referrer-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+    .referrer-table th { text-align: left; padding: .25rem .4rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; color: var(--muted); border-bottom: 1.5px solid var(--border); }
+    .referrer-table td { padding: .3rem .4rem; border-bottom: 1px solid #fef3c7; white-space: nowrap; }
+    .referrer-table tr:last-child td { border-bottom: none; }
+    .referrer-table td:first-child { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .referrer-table td:last-child { text-align: right; color: var(--muted); }
+    .ref-bar { display: inline-block; height: 7px; background: var(--amber); border-radius: 3px; margin-left: .4rem; vertical-align: middle; opacity: .7; }
+    .device-chips { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+    .device-chip {
+      display: flex; align-items: center; gap: .35rem;
+      background: #fffbeb; border: 1px solid var(--border); border-radius: 999px;
+      padding: .22rem .7rem; font-size: .82rem;
+    }
+    .device-chip .dc-val { font-weight: 700; color: var(--amber-dk); }
+
     /* -- Admin controls section -------------------------------------------- */
     .admin-section { padding: 0 2rem 1.5rem; }
     .admin-body {
@@ -494,7 +544,7 @@
       .vo-row { flex-direction: column; align-items: stretch; }
       .vo-row select, .vo-generate { width: 100%; }
 
-      .chart-section, .admin-section { padding: 0 .75rem 1rem; }
+      .chart-section, .admin-section, .analytics-section { padding: 0 .75rem 1rem; }
       .filter-bar { padding: .55rem .65rem; gap: .35rem; }
       .filter-bar input[type="text"] { min-width: 100%; }
       .filter-bar input[type="date"], .filter-bar select { flex: 1; min-width: 110px; }
@@ -562,6 +612,40 @@
     <div class="vo-result" id="vo-result" style="display:none">
       <audio id="vo-player" controls></audio>
       <a id="vo-download" class="vo-download" download="harold-voiceover.mp3">⬇ Download MP3</a>
+    </div>
+  </div>
+</section>
+
+<section class="analytics-section">
+  <div class="section-header">
+    <h2>Landing Page Analytics</h2>
+    <button class="refresh-btn" onclick="toggleAnalytics()">↕ Show / Hide</button>
+  </div>
+  <div class="analytics-body" id="analytics-panel" style="display:none">
+    <div class="analytics-mini-stats">
+      <div class="analytics-mini-stat"><div class="a-value" id="an-total-views">—</div><div class="a-label">Total Views</div></div>
+      <div class="analytics-mini-stat"><div class="a-value" id="an-7d-views">—</div><div class="a-label">Views (7 days)</div></div>
+      <div class="analytics-mini-stat"><div class="a-value" id="an-clicks">—</div><div class="a-label">Phone Clicks</div></div>
+      <div class="analytics-mini-stat"><div class="a-value" id="an-ctr">—</div><div class="a-label">Click Rate (30d)</div></div>
+    </div>
+    <div class="analytics-charts-row">
+      <div class="analytics-chart-wrap">
+        <div class="analytics-sub-title">Daily Page Views (30 days)</div>
+        <canvas id="views-chart"></canvas>
+      </div>
+      <div class="analytics-chart-wrap">
+        <div class="analytics-sub-title">Top Sources</div>
+        <table class="referrer-table">
+          <thead><tr><th>Source</th><th>Visits</th></tr></thead>
+          <tbody id="referrer-body"><tr><td colspan="2" style="color:var(--muted);font-style:italic;font-size:.8rem">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:1rem">
+      <div class="analytics-sub-title">Devices</div>
+      <div class="device-chips" id="device-breakdown">
+        <span style="color:var(--muted);font-size:.82rem;font-style:italic">Loading…</span>
+      </div>
     </div>
   </div>
 </section>
@@ -1238,6 +1322,93 @@
   async function refreshUnavailableBanner() {
     // Banner state is set by loadAdminSettings when admin opens panel.
     // For non-admin viewers we don't know unavailable state — leave hidden.
+  }
+
+  // -- Analytics -------------------------------------------------------------
+  let analyticsLoaded = false;
+  let viewsChart = null;
+
+  function toggleAnalytics() {
+    const panel = document.getElementById('analytics-panel');
+    const showing = panel.style.display === 'none';
+    panel.style.display = showing ? 'block' : 'none';
+    if (showing && !analyticsLoaded) loadAnalytics();
+  }
+
+  async function loadAnalytics() {
+    const res = await adminFetch('/dashboard/api/analytics');
+    if (!res || !res.ok) return;
+    const { overview, daily, referrers, devices } = await res.json();
+    analyticsLoaded = true;
+
+    document.getElementById('an-total-views').textContent = (overview.total_views  || 0).toLocaleString();
+    document.getElementById('an-7d-views').textContent    = (overview.views_7d     || 0).toLocaleString();
+    document.getElementById('an-clicks').textContent      = (overview.total_clicks || 0).toLocaleString();
+    const ctr = overview.views_30d > 0
+      ? ((overview.clicks_30d / overview.views_30d) * 100).toFixed(1) + '%'
+      : '—';
+    document.getElementById('an-ctr').textContent = ctr;
+
+    // Daily views chart
+    const days = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    const lookup = Object.fromEntries(daily.map(r => [r.day, r.count]));
+    const counts = days.map(d => lookup[d] || 0);
+    const labels = days.map(d => {
+      const dt = new Date(d + 'T00:00:00Z');
+      return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+
+    const ctx = document.getElementById('views-chart').getContext('2d');
+    if (viewsChart) {
+      viewsChart.data.labels = labels;
+      viewsChart.data.datasets[0].data = counts;
+      viewsChart.update();
+    } else {
+      viewsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Views', data: counts, backgroundColor: '#c4b5fd', borderColor: '#a78bfa', borderWidth: 1, borderRadius: 4 }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+          },
+        },
+      });
+    }
+
+    // Referrers
+    const maxCount = referrers.length ? referrers[0].count : 1;
+    document.getElementById('referrer-body').innerHTML = referrers.length
+      ? referrers.map(r => {
+          const barW = Math.round((r.count / maxCount) * 60);
+          return `<tr>
+            <td title="${escapeHtml(r.referrer)}">${escapeHtml(r.referrer)}</td>
+            <td>${r.count.toLocaleString()}<span class="ref-bar" style="width:${barW}px"></span></td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="2" style="color:var(--muted);font-style:italic;font-size:.8rem">No data yet</td></tr>';
+
+    // Devices
+    const icons = { mobile: '📱', desktop: '🖥', tablet: '📲', unknown: '?' };
+    document.getElementById('device-breakdown').innerHTML = devices.length
+      ? devices.map(d => `
+          <div class="device-chip">
+            <span>${icons[d.device] || '?'}</span>
+            <span>${escapeHtml(d.device)}</span>
+            <span class="dc-val">${d.count.toLocaleString()}</span>
+          </div>`).join('')
+      : '<span style="color:var(--muted);font-size:.82rem;font-style:italic">No data yet</span>';
   }
 
   // Manual refresh only — auto-refresh disabled to avoid interrupting in-progress actions.
