@@ -557,6 +557,7 @@
     </div>
     <div class="btn-row">
       <button class="action-btn" id="btn-gen-video" onclick="generateVideo()" disabled>🎬 Generate &amp; Download</button>
+      <button class="action-btn secondary" id="btn-export-audio" onclick="exportAudio()" disabled title="Download the combined audio track to overlay on your own video">⬇ Audio Only</button>
     </div>
     <div id="video-progress-wrap" style="display:none">
       <div class="progress-track"><div class="progress-fill" id="video-progress-fill"></div></div>
@@ -1050,6 +1051,10 @@
     const status = document.getElementById('status-video');
     btn.disabled = missing.length > 0;
 
+    // Audio export only requires Harold's audio — image not needed
+    const audioBtn = document.getElementById('btn-export-audio');
+    if (audioBtn) audioBtn.disabled = !state.haroldAudioData;
+
     // Only set a "missing pieces" hint if we haven't already shown a real status
     // (success/error after a generation run). Don't overwrite those.
     const isStaleHint = !status.textContent || status.dataset.hint === '1';
@@ -1198,6 +1203,47 @@
     clearTimeout(progressIdleTimer);
     if (pct < 100) {
       progressIdleTimer = setTimeout(() => fill.classList.add('indeterminate'), 4000);
+    }
+  }
+
+  async function exportAudio() {
+    if (!state.haroldAudioData) return;
+
+    const btn = document.getElementById('btn-export-audio');
+    btn.disabled = true; btn.textContent = '⬇ Exporting…';
+
+    const body = {
+      haroldAudioData: state.haroldAudioData,
+      includeRing:     document.getElementById('include-ring').checked,
+    };
+    if (state.useRecording && state.callContext?.id) {
+      body.useRecording = true;
+      body.callId       = state.callContext.id;
+    } else if (state.callerAudioData) {
+      body.callerAudioData = state.callerAudioData;
+    }
+
+    try {
+      const creds = getAdminCreds();
+      const headers = { 'Content-Type': 'application/json' };
+      if (creds) headers.Authorization = 'Basic ' + creds;
+
+      const res = await fetch('/studio/api/export-audio', {
+        method: 'POST', headers, body: JSON.stringify(body),
+      });
+      if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); return; }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: 'harold-audio.mp3' });
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      alert('Failed to export audio: ' + err.message);
+    } finally {
+      btn.textContent = '⬇ Audio Only';
+      checkVideoReady();
     }
   }
 

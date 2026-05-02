@@ -652,6 +652,73 @@ router.post('/api/generate-image', adminAuth, async (req, res) => {
   }
 });
 
+// ── Export audio only (for overlaying on a native Instagram/TikTok video) ─────
+router.post('/api/export-audio', adminAuth, async (req, res) => {
+  const { haroldAudioData, callerAudioData, useRecording, callId, includeRing = false } = req.body || {};
+  if (!haroldAudioData) return res.status(400).json({ error: 'haroldAudioData is required' });
+
+  const uid      = crypto.randomUUID();
+  const tmpHarold = path.join(os.tmpdir(), `audio-harold-${uid}.mp3`);
+  const tmpCaller = path.join(os.tmpdir(), `audio-caller-${uid}.mp3`);
+  const tmpOut    = path.join(os.tmpdir(), `audio-out-${uid}.mp3`);
+  const ringPath  = path.join(__dirname, '..', 'public', 'audio', 'ring.mp3');
+
+  try {
+    fs.writeFileSync(tmpHarold, Buffer.from(haroldAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
+
+    const hasCallerAudio = !!(callerAudioData || (useRecording && callId));
+    if (hasCallerAudio) {
+      if (callerAudioData) {
+        fs.writeFileSync(tmpCaller, Buffer.from(callerAudioData.replace(/^data:audio\/\w+;base64,/, ''), 'base64'));
+      } else {
+        const call = db.getCallById(parseInt(callId, 10));
+        if (!call || !call.recording_sid) throw new Error('Call recording not available');
+        const recUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Recordings/${call.recording_sid}.mp3`;
+        const creds  = Buffer.from(`${config.accountSid}:${config.authToken}`).toString('base64');
+        const recRes = await fetch(recUrl, { headers: { Authorization: `Basic ${creds}` } });
+        if (!recRes.ok) throw new Error(`Failed to fetch recording: ${recRes.status}`);
+        fs.writeFileSync(tmpCaller, await recRes.buffer());
+      }
+    }
+
+    const hasRing = includeRing && fs.existsSync(ringPath);
+    let outFile = tmpHarold;
+
+    if (hasCallerAudio && hasRing) {
+      await execFileAsync('ffmpeg', [
+        '-i', ringPath, '-i', tmpCaller, '-i', tmpHarold,
+        '-filter_complex', '[0:a][1:a][2:a]concat=n=3:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpOut,
+      ]);
+      outFile = tmpOut;
+    } else if (hasCallerAudio) {
+      await execFileAsync('ffmpeg', [
+        '-i', tmpCaller, '-i', tmpHarold,
+        '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpOut,
+      ]);
+      outFile = tmpOut;
+    } else if (hasRing) {
+      await execFileAsync('ffmpeg', [
+        '-i', ringPath, '-i', tmpHarold,
+        '-filter_complex', '[0:a][1:a]concat=n=2:v=0:a=1[outa]',
+        '-map', '[outa]', '-y', tmpOut,
+      ]);
+      outFile = tmpOut;
+    }
+
+    const buf = fs.readFileSync(outFile);
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Content-Disposition', 'attachment; filename="harold-audio.mp3"');
+    res.send(buf);
+  } catch (err) {
+    console.error('Export audio error:', err);
+    res.status(500).json({ error: err.message || 'Failed to export audio' });
+  } finally {
+    [tmpHarold, tmpCaller, tmpOut].forEach(f => { try { fs.unlinkSync(f); } catch (_) {} });
+  }
+});
+
 // ── Assemble final video (SSE — streams real % progress) ─────────────────────
 // Supports three modes:
 //   - haroldOnly:  no caller audio
