@@ -381,6 +381,33 @@ router.post('/api/save-image', adminAuth, (req, res) => {
   }
 });
 
+// ── Upload photos from the browser directly into the gallery ─────────────────
+router.post('/api/upload-image', adminAuth, (req, res) => {
+  const { imageData, destination = 'gallery' } = req.body || {};
+  if (!imageData) return res.status(400).json({ error: 'imageData is required' });
+
+  const match = imageData.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,/i);
+  if (!match) return res.status(400).json({ error: 'Only JPEG, PNG, and WebP images are accepted' });
+
+  const mime = match[1].toLowerCase();
+  const ext  = (mime === 'image/jpeg' || mime === 'image/jpg') ? 'jpg' : mime.split('/')[1];
+  const fname = `upload-${Date.now()}-${crypto.randomUUID().slice(0, 6)}.${ext}`;
+
+  const dir = destination === 'refs'
+    ? path.join(__dirname, '..', 'public', 'harold-refs')
+    : HAROLD_GALLERY_DIR;
+
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const buf = Buffer.from(imageData.replace(/^data:image\/[\w+]+;base64,/, ''), 'base64');
+    fs.writeFileSync(path.join(dir, fname), buf);
+    const urlBase = destination === 'refs' ? '/harold-refs' : '/harold-gallery';
+    res.json({ url: `${urlBase}/${fname}`, name: fname });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Generate Harold's response from a real call's transcript ─────────────────
 router.post('/api/generate-response', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });

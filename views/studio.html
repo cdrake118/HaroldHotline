@@ -150,6 +150,23 @@
     .scenario-group label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
     .scenario-group textarea { min-height: 60px; }
 
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 18px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      margin-bottom: 10px;
+      user-select: none;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--amber);
+      background: rgba(245,158,11,.06);
+    }
+    .upload-zone-icon { font-size: 1.6rem; line-height: 1; margin-bottom: 4px; }
+    .upload-zone-hint { font-size: .78rem; color: var(--muted); }
+
     .gallery-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
       gap: 8px; margin-top: 12px; padding: 10px;
@@ -511,7 +528,21 @@
       <h2>Harold's Photo</h2>
       <span class="badge">pick from gallery</span>
     </div>
-    <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Click any photo below to use it. Generation is available as a fallback if you want a brand-new image.</div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Click any photo below to use it. Upload your own or generate a brand-new one as a fallback.</div>
+
+    <div class="upload-zone" id="upload-zone"
+         onclick="document.getElementById('upload-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="onImageDrop(event)">
+      <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp" multiple
+             style="display:none" onchange="handleUploadFiles(this.files)">
+      <div class="upload-zone-icon">📁</div>
+      <div class="upload-zone-hint">Click to upload, or drag &amp; drop photos here<br>
+        <span style="font-size:.72rem;opacity:.75">JPEG · PNG · WebP — saved directly to your gallery</span>
+      </div>
+    </div>
+
     <div class="gallery-grid" id="gallery-grid"></div>
     <div class="btn-row" style="margin-top:14px">
       <button class="action-btn secondary" id="btn-gen-image" onclick="generateImage()" disabled>✨ Generate New Photo</button>
@@ -1456,6 +1487,67 @@
     dot('image', true);
     checkVideoReady();
     renderBadgePreview();
+  }
+
+  function onImageDrop(e) {
+    e.preventDefault();
+    document.getElementById('upload-zone').classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => /^image\/(jpeg|png|webp)$/i.test(f.type));
+    if (files.length) handleUploadFiles(files);
+  }
+
+  async function handleUploadFiles(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    const zone   = document.getElementById('upload-zone');
+    const status = document.getElementById('status-image');
+    zone.style.pointerEvents = 'none';
+
+    let lastUrl = null;
+    for (let i = 0; i < files.length; i++) {
+      status.textContent = files.length > 1 ? `Uploading ${i + 1} of ${files.length}…` : 'Uploading…';
+      status.className   = 'status-line';
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(files[i]);
+      });
+
+      const res = await adminFetch('/studio/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: dataUrl }),
+      });
+      if (!res || !res.ok) {
+        const e = await res?.json().catch(() => ({}));
+        status.textContent = `Upload failed: ${e?.error || 'unknown error'}`;
+        status.className   = 'status-line error';
+        zone.style.pointerEvents = '';
+        return;
+      }
+      const { url } = await res.json();
+      lastUrl = url;
+    }
+
+    // Reset input so the same file can be re-uploaded if needed
+    document.getElementById('upload-input').value = '';
+    zone.style.pointerEvents = '';
+
+    // Refresh gallery and auto-select the last uploaded image
+    galleryLoaded = false;
+    await loadGallery();
+    if (lastUrl) {
+      const thumb = [...document.querySelectorAll('.gallery-thumb')]
+        .find(t => t.querySelector('img')?.getAttribute('src') === lastUrl);
+      await pickGalleryImage(lastUrl, thumb || document.querySelector('.gallery-thumb'));
+    }
+
+    const noun = files.length === 1 ? '1 photo' : `${files.length} photos`;
+    status.textContent = `✓ ${noun} uploaded`;
+    status.className   = 'status-line ok';
   }
 
   async function saveImageToGallery() {
