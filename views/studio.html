@@ -174,7 +174,7 @@
       max-height: 320px; overflow-y: auto;
     }
     .gallery-thumb {
-      cursor: pointer; border-radius: 6px; overflow: hidden;
+      cursor: pointer; border-radius: 6px; overflow: hidden; position: relative;
       border: 2px solid transparent; transition: border-color .1s;
     }
     .gallery-thumb:hover { border-color: var(--amber); }
@@ -182,6 +182,16 @@
     .gallery-thumb img { width: 100%; height: 110px; object-fit: cover; display: block; }
     .gallery-section-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; grid-column: 1 / -1; padding: 4px 0 2px; }
     .gallery-empty { grid-column: 1 / -1; color: var(--muted); font-size: .82rem; padding: 8px; text-align: center; }
+    .gallery-thumb .del-btn {
+      position: absolute; top: 3px; right: 3px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(220,38,38,.82); color: #fff; border: none;
+      font-size: 11px; line-height: 1; cursor: pointer;
+      display: none; align-items: center; justify-content: center;
+      padding: 0; z-index: 2;
+    }
+    .gallery-thumb:hover .del-btn { display: flex; }
+    .gallery-thumb .del-btn:hover { background: #dc2626; }
 
     .post-textarea { min-height: 130px; font-size: .9rem; }
     .post-meta { display: flex; gap: 14px; font-size: .76rem; color: var(--muted); margin-top: 6px; }
@@ -1442,13 +1452,18 @@
     const { refs, generated } = await res.json();
     galleryImageUrls = [...generated.map(g => g.url), ...refs.map(r => r.url)];
     let html = '';
+    const thumb = (item, source) =>
+      `<div class="gallery-thumb" onclick="pickGalleryImage('${item.url}', this)">
+        <img src="${item.url}" alt="">
+        <button class="del-btn" title="Remove" onclick="event.stopPropagation();deleteGalleryImage('${item.name}','${source}',this.closest('.gallery-thumb'))">✕</button>
+      </div>`;
     if (generated.length) {
       html += '<div class="gallery-section-label">Previously Generated</div>';
-      generated.forEach(g => { html += `<div class="gallery-thumb" onclick="pickGalleryImage('${g.url}', this)"><img src="${g.url}" alt=""></div>`; });
+      generated.forEach(g => { html += thumb(g, 'gallery'); });
     }
     if (refs.length) {
       html += '<div class="gallery-section-label">Reference Photos</div>';
-      refs.forEach(r => { html += `<div class="gallery-thumb" onclick="pickGalleryImage('${r.url}', this)"><img src="${r.url}" alt=""></div>`; });
+      refs.forEach(r => { html += thumb(r, 'refs'); });
     }
     if (!html) html = '<div class="gallery-empty">No saved images yet — generate one or upload to /public/harold-refs/</div>';
     grid.innerHTML = html;
@@ -1548,6 +1563,30 @@
     const noun = files.length === 1 ? '1 photo' : `${files.length} photos`;
     status.textContent = `✓ ${noun} uploaded`;
     status.className   = 'status-line ok';
+  }
+
+  async function deleteGalleryImage(name, source, thumbEl) {
+    if (!confirm('Remove this photo from the gallery?')) return;
+    const res = await adminFetch('/studio/api/gallery-image', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, source }),
+    });
+    if (!res || !res.ok) {
+      const e = await res?.json().catch(() => ({}));
+      alert('Delete failed: ' + (e?.error || 'unknown error'));
+      return;
+    }
+    // If the deleted image was selected, clear the selection
+    if (thumbEl.classList.contains('selected')) {
+      state.imageData = null;
+      state.imageFromGallery = false;
+      document.getElementById('image-preview').innerHTML = '';
+      document.getElementById('status-image').textContent = '';
+      checkVideoReady();
+    }
+    galleryImageUrls = galleryImageUrls.filter(u => !u.endsWith('/' + name));
+    thumbEl.remove();
   }
 
   async function saveImageToGallery() {

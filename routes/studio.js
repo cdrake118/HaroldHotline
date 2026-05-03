@@ -382,8 +382,7 @@ router.post('/api/save-image', adminAuth, (req, res) => {
 });
 
 // ── Upload photos from the browser directly into the gallery ─────────────────
-router.post('/api/upload-image', adminAuth, (req, res) => {
-  const { imageData, destination = 'gallery' } = req.body || {};
+router.post('/api/upload-image', adminAuth, (req, res) => {  const { imageData, destination = 'gallery' } = req.body || {};
   if (!imageData) return res.status(400).json({ error: 'imageData is required' });
 
   const match = imageData.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,/i);
@@ -403,6 +402,36 @@ router.post('/api/upload-image', adminAuth, (req, res) => {
     fs.writeFileSync(path.join(dir, fname), buf);
     const urlBase = destination === 'refs' ? '/harold-refs' : '/harold-gallery';
     res.json({ url: `${urlBase}/${fname}`, name: fname });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Delete a gallery or reference image ───────────────────────────────────────
+router.delete('/api/gallery-image', adminAuth, (req, res) => {
+  const { name, source = 'gallery' } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  // Reject anything that looks like path traversal
+  const safeName = path.basename(name);
+  if (safeName !== name || !safeName || !/\.(jpg|jpeg|png|webp)$/i.test(safeName)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+
+  const dir      = source === 'refs'
+    ? path.join(__dirname, '..', 'public', 'harold-refs')
+    : HAROLD_GALLERY_DIR;
+  const filePath = path.join(dir, safeName);
+
+  // Extra guard: resolved path must be inside the expected directory
+  if (!filePath.startsWith(dir + path.sep)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
+  try {
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
