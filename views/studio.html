@@ -150,6 +150,33 @@
     .scenario-group label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 5px; }
     .scenario-group textarea { min-height: 60px; }
 
+    /* Tone direction — freeform note + sliders to steer Harold's responses. */
+    .tone-block {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; margin-top: 14px;
+    }
+    .tone-block-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+      font-size: .82rem; color: var(--text); font-weight: 600;
+    }
+    .tone-block-header .tone-reset {
+      margin-left: auto; background: transparent; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 2px 8px; font-size: .72rem; cursor: pointer;
+    }
+    .tone-block-header .tone-reset:hover { color: var(--text); border-color: var(--text); }
+    .tone-block textarea { min-height: 50px; font-size: .85rem; }
+    .tone-sliders {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px 18px; margin-top: 12px;
+    }
+    .tone-slider {
+      display: flex; flex-direction: column; gap: 4px; font-size: .76rem; color: var(--muted);
+    }
+    .tone-slider .tone-row { display: flex; align-items: center; gap: 8px; }
+    .tone-slider input[type=range] { flex: 1; accent-color: var(--amber); }
+    .tone-slider .ends { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); }
+    @media(max-width: 620px) { .tone-sliders { grid-template-columns: 1fr; } }
+
     .upload-zone {
       border: 2px dashed var(--border);
       border-radius: 10px;
@@ -310,6 +337,25 @@
       border: 1px solid var(--border); display: block;
     }
 
+    .pub-queue-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .pub-queue-table th, .pub-queue-table td {
+      text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top;
+    }
+    .pub-queue-table th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+    .pub-queue-table tr:last-child td { border-bottom: none; }
+    .pub-status { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+    .pub-status.queued     { background: rgba(245,158,11,.18);  color: var(--amber-lt); }
+    .pub-status.processing { background: rgba(99,102,241,.22);  color: #a5b4fc; }
+    .pub-status.posted     { background: rgba(34,197,94,.18);   color: #86efac; }
+    .pub-status.failed     { background: rgba(239,68,68,.2);    color: #fca5a5; }
+    .pub-status.cancelled  { background: rgba(115,115,115,.2);  color: var(--muted); }
+    .pub-row-actions button {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 8px; font-size: .72rem; cursor: pointer; margin-right: 4px;
+    }
+    .pub-row-actions button:hover { color: var(--text); border-color: var(--text); }
+    .pub-empty { color: var(--muted); font-size: .82rem; padding: 6px 0; }
+
     .mode-toggle {
       display: flex; gap: 6px; padding: 5px;
       background: var(--surface); border: 1px solid var(--border);
@@ -467,6 +513,29 @@
       <textarea id="scenario" rows="2" placeholder="e.g. 'caller's cat brought home a sock and acts proud of it' or paste your own seed idea…"></textarea>
     </div>
     </div><!-- /#synthetic-controls -->
+
+    <!-- Tone direction (visible in synthetic + real-call modes; hidden in wisdom mode). -->
+    <div id="tone-controls" class="tone-block">
+      <div class="tone-block-header">
+        🎚️ Tone direction
+        <button class="tone-reset" type="button" onclick="resetTone()">reset</button>
+      </div>
+      <textarea id="tone-note" rows="2" placeholder="Optional note for this response — e.g. 'be more encouraging here, the caller sounds vulnerable' or 'lean into cat silliness'"></textarea>
+      <div class="tone-sliders">
+        <div class="tone-slider">
+          <div class="tone-row"><input type="range" id="tone-encouragement" min="0" max="100" value="20"></div>
+          <div class="ends"><span>cutting</span><span>encouraging</span></div>
+        </div>
+        <div class="tone-slider">
+          <div class="tone-row"><input type="range" id="tone-playfulness" min="0" max="100" value="35"></div>
+          <div class="ends"><span>deadpan</span><span>silly</span></div>
+        </div>
+        <div class="tone-slider">
+          <div class="tone-row"><input type="range" id="tone-length" min="0" max="100" value="40"></div>
+          <div class="ends"><span>punchy</span><span>expansive</span></div>
+        </div>
+      </div>
+    </div>
     <div style="margin-top:18px">
       <div class="btn-row">
         <button class="action-btn" id="btn-generate-script" onclick="generateScript()">✨ Generate Script</button>
@@ -630,6 +699,31 @@
     <div class="status-line" id="status-post"></div>
   </div>
 
+  <!-- Step 7: Publish to Instagram / Facebook -->
+  <div class="step-card">
+    <div class="step-header">
+      <div class="step-num" id="num-7">7</div>
+      <h2>Publish</h2>
+      <span class="badge" id="publish-status-badge">checking…</span>
+    </div>
+    <div class="status-line" id="publish-not-configured" style="display:none;color:#f87171">
+      Not configured — set <code>META_ACCESS_TOKEN</code>, <code>META_PAGE_ID</code>, <code>META_IG_USER_ID</code> and <code>BASE_URL</code> on Railway.
+    </div>
+    <div class="video-options" style="margin-top:6px">
+      <label><input type="checkbox" id="pub-ig" checked> 📸 Instagram (Reel)</label>
+      <label><input type="checkbox" id="pub-fb"> 📘 Facebook Page</label>
+      <label style="margin-left:auto"><input type="radio" name="pub-when" value="now" checked> Publish now</label>
+      <label><input type="radio" name="pub-when" value="schedule"> Schedule</label>
+      <input type="datetime-local" id="pub-when-at" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:.4rem .55rem;font-size:.85rem;font-family:inherit">
+    </div>
+    <div class="btn-row">
+      <button class="action-btn" id="btn-publish" onclick="publishVideo()" disabled>🚀 Publish</button>
+      <button class="action-btn secondary" onclick="loadPublishQueue()">↻ Refresh queue</button>
+    </div>
+    <div class="status-line" id="status-publish"></div>
+    <div id="publish-queue" style="margin-top:14px"></div>
+  </div>
+
 </div>
 
 <!-- Post history modal -->
@@ -677,6 +771,7 @@
     callContext:     null,
     postText:        null,
     wisdomText:      null, // raw wisdom (without intro)
+    videoBase64:     null,
     _videoBlobUrl:   null,
   };
 
@@ -732,6 +827,7 @@
   function applyModeUI() {
     const wisdom = isWisdomMode();
     document.getElementById('synthetic-controls').style.display = wisdom ? 'none' : '';
+    document.getElementById('tone-controls').style.display      = wisdom ? 'none' : '';
     document.getElementById('wisdom-picker').style.display      = wisdom ? '' : 'none';
     document.getElementById('btn-generate-script').style.display = wisdom ? 'none' : (isRealCallMode() ? 'none' : 'inline-flex');
     document.getElementById('step-2-card').style.display        = wisdom ? 'none' : '';
@@ -998,6 +1094,7 @@
       callerPersona: document.getElementById('caller-persona').value,
       mood:          document.getElementById('mood').value,
       scenario:      document.getElementById('scenario').value.trim(),
+      ...getToneRequestFields(),
     };
 
     const res = await adminFetch('/studio/api/generate-script', {
@@ -1065,7 +1162,47 @@
       state.haroldResponse = e.target.value;
       updateGenerateButtons();
     });
+    initToneControls();
   });
+
+  // -- Tone direction (note + sliders) — persists to localStorage so the producer
+  // -- can dial in a vibe and have it stick across sessions.
+  const TONE_DEFAULTS = { note: '', encouragement: 20, playfulness: 35, length: 40 };
+  function readTone() {
+    return {
+      note:          document.getElementById('tone-note').value,
+      encouragement: +document.getElementById('tone-encouragement').value,
+      playfulness:   +document.getElementById('tone-playfulness').value,
+      length:        +document.getElementById('tone-length').value,
+    };
+  }
+  function applyTone(t) {
+    document.getElementById('tone-note').value           = t.note ?? '';
+    document.getElementById('tone-encouragement').value  = t.encouragement ?? TONE_DEFAULTS.encouragement;
+    document.getElementById('tone-playfulness').value    = t.playfulness   ?? TONE_DEFAULTS.playfulness;
+    document.getElementById('tone-length').value         = t.length        ?? TONE_DEFAULTS.length;
+  }
+  function saveTone() {
+    try { localStorage.setItem('haroldStudioTone', JSON.stringify(readTone())); } catch (_) {}
+  }
+  function resetTone() { applyTone(TONE_DEFAULTS); saveTone(); }
+  function initToneControls() {
+    try {
+      const raw = localStorage.getItem('haroldStudioTone');
+      if (raw) applyTone({ ...TONE_DEFAULTS, ...JSON.parse(raw) });
+    } catch (_) {}
+    ['tone-note','tone-encouragement','tone-playfulness','tone-length'].forEach(id => {
+      document.getElementById(id).addEventListener('input', saveTone);
+    });
+  }
+  // Returns { tone, toneNote } for inclusion in generate-* request bodies.
+  function getToneRequestFields() {
+    const t = readTone();
+    return {
+      toneNote: t.note,
+      tone: { encouragement: t.encouragement, playfulness: t.playfulness, length: t.length },
+    };
+  }
 
   function updateGenerateButtons() {
     const hasScript  = !!(state.callerScript?.trim());
@@ -1365,6 +1502,7 @@
           const blob  = new Blob([bytes], { type: 'video/mp4' });
           if (state._videoBlobUrl) URL.revokeObjectURL(state._videoBlobUrl);
           state._videoBlobUrl = URL.createObjectURL(blob);
+          state.videoBase64   = data.videoBase64; // retained so Step 7 can publish it
           const a = document.createElement('a');
           a.href = state._videoBlobUrl; a.download = `harold-studio-${Date.now()}.mp4`; a.click();
           const vid = document.getElementById('video-preview');
@@ -1373,6 +1511,7 @@
           vid.play().catch(() => {});
           dot('video', true);
           status.textContent = '✓ Downloaded!'; status.className = 'status-line ok';
+          updatePublishButton();
           break;
         }
         if (data.done && !data.videoBase64) throw new Error('Job finished without video data.');
@@ -1421,6 +1560,7 @@
         transcript,
         callType: state.callContext?.call_type,
         callId:   state.callContext?.id,
+        ...getToneRequestFields(),
       }),
     });
     btn.disabled = false; btn.textContent = "✨ Generate Harold's Response";
@@ -1959,7 +2099,142 @@
     });
     document.getElementById('call-type').addEventListener('change', suggestBadgeIfUntouched);
     attachDraftListeners();
+
+    // Publish step: enable button when we have a video + at least one target.
+    ['pub-ig','pub-fb'].forEach(id => document.getElementById(id).addEventListener('change', updatePublishButton));
+    document.querySelectorAll('input[name="pub-when"]').forEach(el => el.addEventListener('change', updatePublishButton));
+    document.getElementById('pub-when-at').addEventListener('input', updatePublishButton);
+    // Default the schedule field to "an hour from now" so it's not empty when picked
+    const dt = new Date(Date.now() + 60 * 60 * 1000);
+    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+    document.getElementById('pub-when-at').value = dt.toISOString().slice(0, 16);
   });
+
+  // -- Step 7: Publish to Instagram / Facebook -----------------------------------
+  function updatePublishButton() {
+    const btn = document.getElementById('btn-publish');
+    const hasVideo = !!state.videoBase64;
+    const hasTarget = document.getElementById('pub-ig').checked || document.getElementById('pub-fb').checked;
+    btn.disabled = !(hasVideo && hasTarget && publishConfigured);
+    if (!hasVideo) btn.title = 'Generate a video first';
+    else if (!hasTarget) btn.title = 'Pick at least one target';
+    else if (!publishConfigured) btn.title = 'Meta credentials not configured';
+    else btn.title = '';
+  }
+
+  let publishConfigured = false;
+  async function loadPublishStatus() {
+    const badge = document.getElementById('publish-status-badge');
+    const warn  = document.getElementById('publish-not-configured');
+    try {
+      const res = await adminFetch('/api/publish/status');
+      if (!res || !res.ok) { badge.textContent = 'unavailable'; return; }
+      const s = await res.json();
+      const igOk = !!s.configured?.ig;
+      const fbOk = !!s.configured?.fb;
+      publishConfigured = (igOk || fbOk) && !!s.hasBaseUrl;
+      const parts = [];
+      if (igOk) parts.push('IG');
+      if (fbOk) parts.push('FB');
+      badge.textContent = publishConfigured ? `ready: ${parts.join(' + ')}` : 'not configured';
+      warn.style.display = publishConfigured ? 'none' : '';
+      // Disable IG/FB checkboxes that aren't configured
+      document.getElementById('pub-ig').disabled = !igOk;
+      document.getElementById('pub-fb').disabled = !fbOk;
+      if (!igOk) document.getElementById('pub-ig').checked = false;
+      updatePublishButton();
+    } catch (err) {
+      badge.textContent = 'error';
+    }
+  }
+
+  async function publishVideo() {
+    const status = document.getElementById('status-publish');
+    status.textContent = ''; status.className = 'status-line';
+    if (!state.videoBase64) { status.textContent = 'Generate a video first.'; status.className = 'status-line err'; return; }
+    const targets = [];
+    if (document.getElementById('pub-ig').checked) targets.push('ig');
+    if (document.getElementById('pub-fb').checked) targets.push('fb');
+    if (!targets.length) { status.textContent = 'Pick at least one target.'; status.className = 'status-line err'; return; }
+    const when = document.querySelector('input[name="pub-when"]:checked').value;
+    let scheduledAt = Date.now();
+    if (when === 'schedule') {
+      const v = document.getElementById('pub-when-at').value;
+      if (!v) { status.textContent = 'Pick a date/time.'; status.className = 'status-line err'; return; }
+      scheduledAt = new Date(v).getTime();
+      if (!Number.isFinite(scheduledAt)) { status.textContent = 'Invalid date.'; status.className = 'status-line err'; return; }
+    }
+    const caption = document.getElementById('post-text').value.trim();
+
+    const btn = document.getElementById('btn-publish');
+    btn.disabled = true; btn.textContent = '🚀 Uploading…';
+    try {
+      const res = await adminFetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoBase64: state.videoBase64, caption, scheduledAt, targets }),
+      });
+      if (!res || !res.ok) {
+        const e = await res?.json().catch(() => ({}));
+        throw new Error(e?.error || `HTTP ${res?.status}`);
+      }
+      const data = await res.json();
+      status.textContent = when === 'now'
+        ? `✓ Queued for immediate publish (${targets.join(', ')}). Refresh queue to track.`
+        : `✓ Scheduled for ${new Date(scheduledAt).toLocaleString()} (${targets.join(', ')}).`;
+      status.className = 'status-line ok';
+      loadPublishQueue();
+    } catch (err) {
+      status.textContent = err.message || 'Failed to publish.';
+      status.className = 'status-line err';
+    } finally {
+      btn.textContent = '🚀 Publish';
+      updatePublishButton();
+    }
+  }
+
+  async function loadPublishQueue() {
+    const wrap = document.getElementById('publish-queue');
+    wrap.innerHTML = '<div class="pub-empty">Loading…</div>';
+    try {
+      const res = await adminFetch('/api/publish/jobs?limit=20');
+      if (!res || !res.ok) { wrap.innerHTML = '<div class="pub-empty">Failed to load queue.</div>'; return; }
+      const { jobs } = await res.json();
+      if (!jobs.length) { wrap.innerHTML = '<div class="pub-empty">No publish jobs yet.</div>'; return; }
+      const rows = jobs.map(j => {
+        const target = j.target === 'ig' ? '📸 Instagram' : '📘 Facebook';
+        const when   = new Date(j.scheduledAt).toLocaleString();
+        const updated = new Date(j.updatedAt).toLocaleString();
+        const cap    = (j.caption || '').slice(0, 60).replace(/\n/g, ' ');
+        const actions = [];
+        if (j.status === 'queued')   actions.push(`<button onclick="cancelPublishJob(${j.id})">cancel</button>`);
+        if (j.status === 'failed')   actions.push(`<button onclick="retryPublishJob(${j.id})">retry</button>`, `<button onclick="cancelPublishJob(${j.id})">cancel</button>`);
+        if (j.status === 'cancelled') actions.push(`<button onclick="retryPublishJob(${j.id})">retry</button>`);
+        const errCell = j.error ? `<div style="color:#fca5a5;font-size:.72rem;margin-top:3px">${escapeHtml(j.error)}</div>` : '';
+        return `<tr>
+          <td>${target}</td>
+          <td><span class="pub-status ${j.status}">${j.status}</span>${errCell}</td>
+          <td>${when}</td>
+          <td>${escapeHtml(cap)}${j.caption && j.caption.length > 60 ? '…' : ''}</td>
+          <td class="pub-row-actions">${actions.join('')}</td>
+        </tr>`;
+      }).join('');
+      wrap.innerHTML = `<table class="pub-queue-table"><thead><tr>
+        <th>Target</th><th>Status</th><th>Scheduled</th><th>Caption</th><th></th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+    } catch (err) {
+      wrap.innerHTML = `<div class="pub-empty">Error: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  async function cancelPublishJob(id) {
+    const res = await adminFetch(`/api/publish/jobs/${id}/cancel`, { method: 'POST' });
+    if (res?.ok) loadPublishQueue();
+  }
+  async function retryPublishJob(id) {
+    const res = await adminFetch(`/api/publish/jobs/${id}/retry`, { method: 'POST' });
+    if (res?.ok) loadPublishQueue();
+  }
 
   // Initialization order: load voices, then load call context (which may set
   // callContext changing the draftKey), then load any saved draft for the
@@ -1976,6 +2251,8 @@
     loadGallery().catch(() => {});
     loadWisdomList().catch(() => {});
     loadBadges().catch(() => {});
+    loadPublishStatus().catch(() => {});
+    loadPublishQueue().catch(() => {});
   })();
 </script>
 </body>

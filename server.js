@@ -13,7 +13,7 @@ const app = express();
 app.use(compression());
 
 app.use(express.urlencoded({ extended: false }));
-app.use(express.json({ limit: '15mb' }));   // base64 image/audio payloads can exceed default 100kb
+app.use(express.json({ limit: '40mb' }));   // base64 image/audio/video payloads
 
 // Long-cache static media so browsers don't re-fetch on each dashboard render
 const STATIC_MAX_AGE = '7d';
@@ -26,6 +26,11 @@ app.use('/audio', express.static(audioDir, { maxAge: STATIC_MAX_AGE, immutable: 
 app.use('/harold-refs',    express.static(path.join(__dirname, 'public', 'harold-refs'),    { maxAge: STATIC_MAX_AGE }));
 app.use('/harold-gallery', express.static(path.join(__dirname, 'public', 'harold-gallery'), { maxAge: STATIC_MAX_AGE }));
 app.use('/harold-badges',  express.static(path.join(__dirname, 'public', 'harold-badges'),  { maxAge: STATIC_MAX_AGE }));
+
+// Studio-rendered videos staged here for Meta to fetch publicly.
+// Lazy-loaded so the publish route can override the dir via env var.
+const publish = require('./routes/publish');
+app.use('/studio-videos', express.static(publish.VIDEOS_DIR, { maxAge: '1d', immutable: false }));
 
 // Serve other static assets (favicon, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -56,6 +61,8 @@ app.get('/logout', (req, res) => {
 app.use('/voice', require('./routes/voice'));
 app.use('/dashboard', require('./routes/dashboard'));
 app.use('/studio', require('./routes/studio'));
+app.use('/', publish);
+publish.startScheduler();
 
 // Health check for Railway
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

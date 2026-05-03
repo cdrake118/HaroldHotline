@@ -85,6 +85,28 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_page_views_ts ON page_views(ts);
 `);
 
+// Publish queue — videos rendered in the studio, scheduled for IG/FB.
+// status: queued | processing | posted | failed | cancelled
+db.exec(`
+  CREATE TABLE IF NOT EXISTS publish_jobs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    target           TEXT NOT NULL,                     -- 'ig' | 'fb'
+    video_path       TEXT NOT NULL,                     -- absolute path on disk
+    video_url        TEXT NOT NULL,                     -- public URL Meta will fetch
+    caption          TEXT,
+    scheduled_at     INTEGER NOT NULL,                  -- unix ms; <= now() means publish ASAP
+    status           TEXT NOT NULL DEFAULT 'queued',
+    external_post_id TEXT,                              -- FB video id / IG media id once posted
+    error            TEXT,
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    created_at       INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+    updated_at       INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_scheduled
+    ON publish_jobs(status, scheduled_at);
+`);
+
 // Migrations for existing databases
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
@@ -197,6 +219,45 @@ const stmts = {
 
   savePost:  db.prepare(`INSERT INTO studio_posts (call_id, call_type, caption) VALUES (@callId, @callType, @caption)`),
   listPosts: db.prepare(`SELECT * FROM studio_posts ORDER BY created_at DESC LIMIT ?`),
+
+  // Publish queue
+  insertPublishJob: db.prepare(`
+    INSERT INTO publish_jobs (target, video_path, video_url, caption, scheduled_at)
+    VALUES (@target, @videoPath, @videoUrl, @caption, @scheduledAt)
+  `),
+  getPublishJob:    db.prepare(`SELECT * FROM publish_jobs WHERE id = ?`),
+  listPublishJobs:  db.prepare(`SELECT * FROM publish_jobs ORDER BY scheduled_at DESC, id DESC LIMIT ?`),
+  duePublishJobs:   db.prepare(`
+    SELECT * FROM publish_jobs
+    WHERE status = 'queued' AND scheduled_at <= ?
+    ORDER BY scheduled_at ASC LIMIT 5
+  `),
+  updatePublishStatus: db.prepare(`
+    UPDATE publish_jobs
+       SET status = @status,
+           external_post_id = COALESCE(@externalPostId, external_post_id),
+           error    = @error,
+           attempts = attempts + CASE WHEN @incAttempts = 1 THEN 1 ELSE 0 END,
+           updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+     WHERE id = @id
+  `),
+  cancelPublishJob: db.prepare(`
+    UPDATE publish_jobs
+       SET status = 'cancelled',
+           updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+     WHERE id = ? AND status IN ('queued','failed')
+  `),
+  retryPublishJob: db.prepare(`
+    UPDATE publish_jobs
+       SET status = 'queued', error = NULL,
+           scheduled_at = CAST(strftime('%s','now') AS INTEGER) * 1000,
+           updated_at   = CAST(strftime('%s','now') AS INTEGER) * 1000
+     WHERE id = ? AND status IN ('failed','cancelled')
+  `),
+  listOldPublishedJobs: db.prepare(`
+    SELECT id, video_path FROM publish_jobs
+     WHERE status = 'posted' AND updated_at < ?
+  `),
 
   // Wisdom pool
   pickWisdom:     db.prepare(`SELECT id, text FROM wisdoms ORDER BY RANDOM() LIMIT 1`),
@@ -393,6 +454,18 @@ module.exports = {
 
   savePost:  (callId, callType, caption) => stmts.savePost.run({ callId: callId || null, callType: callType || null, caption }),
   listPosts: (limit = 50)                => stmts.listPosts.all(limit),
+
+  // Publish queue
+  insertPublishJob: ({ target, videoPath, videoUrl, caption, scheduledAt }) =>
+    stmts.insertPublishJob.run({ target, videoPath, videoUrl, caption: caption || null, scheduledAt }),
+  getPublishJob:   (id)        => stmts.getPublishJob.get(id),
+  listPublishJobs: (limit = 50) => stmts.listPublishJobs.all(limit),
+  duePublishJobs:  (nowMs)     => stmts.duePublishJobs.all(nowMs),
+  updatePublishStatus: ({ id, status, externalPostId = null, error = null, incAttempts = 0 }) =>
+    stmts.updatePublishStatus.run({ id, status, externalPostId, error, incAttempts }),
+  cancelPublishJob: (id) => stmts.cancelPublishJob.run(id),
+  retryPublishJob:  (id) => stmts.retryPublishJob.run(id),
+  listOldPublishedJobs: (cutoffMs) => stmts.listOldPublishedJobs.all(cutoffMs),
 
   // Wisdom pool
   pickWisdom:     ()             => stmts.pickWisdom.get(),

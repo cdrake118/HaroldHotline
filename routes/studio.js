@@ -438,25 +438,59 @@ router.delete('/api/gallery-image', adminAuth, (req, res) => {
 });
 
 // ── Generate Harold's response from a real call's transcript ─────────────────
+// Convert tone sliders (0-100) + freeform note into prompt-ready instructions.
+// Used by both /api/generate-script and /api/generate-response so the studio
+// can steer Harold's voice without hard-forking the prompt.
+function buildToneInstructions(tone, note) {
+  const t = tone || {};
+  const enc = Math.max(0, Math.min(100, Number(t.encouragement)));
+  const ply = Math.max(0, Math.min(100, Number(t.playfulness)));
+  const len = Math.max(0, Math.min(100, Number(t.length)));
+  const lines = [];
+
+  if (Number.isFinite(enc)) {
+    if (enc < 25)        lines.push('Tone: cutting, dismissive, judgmental. Harold does not comfort or validate.');
+    else if (enc < 55)   lines.push('Tone: mostly cutting and judgmental, but the truth slips through. No coddling.');
+    else if (enc < 80)   lines.push('Tone: honest but warm. Acknowledge the caller before offering Harold\'s view. Still pointed, never saccharine.');
+    else                 lines.push('Tone: genuinely encouraging and supportive. Validate the caller, then offer Harold\'s perspective gently. Still recognizably Harold — observational, a little wry — never a Hallmark card.');
+  }
+  if (Number.isFinite(ply)) {
+    if (ply < 25)        lines.push('Vibe: deadpan and serious. No cat-asides, no whimsy.');
+    else if (ply < 55)   lines.push('Vibe: dry with occasional cat-perspective observations (naps, birds, the indignity of closed doors).');
+    else if (ply < 80)   lines.push('Vibe: playful and a little silly. Lean into Harold being a cat — distractible, prone to non-sequiturs about napping or staring at walls.');
+    else                 lines.push('Vibe: very silly and light. Cat-brained tangents, gentle absurdity, easily sidetracked by imaginary passing moths. Keep the warmth.');
+  }
+  if (Number.isFinite(len)) {
+    if (len < 33)        lines.push('Length: short and punchy. 1 sentence ideal, 2 max. Under 25 words.');
+    else if (len < 67)   lines.push('Length: 1-2 sentences. Under 35 words.');
+    else                 lines.push('Length: a little more room — 2-3 sentences, up to 55 words. Don\'t pad.');
+  }
+  if (note && note.trim()) {
+    lines.push(`Note from the producer (weave this in naturally — does not need to be quoted): "${note.trim()}"`);
+  }
+  return lines.length ? `\nTone direction:\n- ${lines.join('\n- ')}\n` : '';
+}
+
 router.post('/api/generate-response', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
-  const { transcript, callType, callId } = req.body;
+  const { transcript, callType, callId, tone, toneNote } = req.body;
   if (!transcript) return res.status(400).json({ error: 'transcript required' });
 
   const typeLabel = { confession: 'confession', question: 'question', speak: 'message', wisdom: 'wisdom reading' }[callType] || 'message';
+  const toneBlock = buildToneInstructions(tone, toneNote);
   const prompt =
     `You write responses for Harold's Hotline. Harold is a real tabby cat — dry, direct, a little cutting. ` +
     `He speaks his own mind through a British announcer, always in the third person.\n\n` +
-    `A caller left the following ${typeLabel}:\n"${transcript}"\n\n` +
-    `Write 3 distinct Harold responses. Return ONLY valid JSON:\n{"variations":["...","...","..."]}\n\n` +
+    `A caller left the following ${typeLabel}:\n"${transcript}"\n` +
+    toneBlock +
+    `\nWrite 3 distinct Harold responses. Return ONLY valid JSON:\n{"variations":["...","...","..."]}\n\n` +
     `Rules for each:\n` +
-    `- 1-2 sentences. Punchy. Under 35 words.\n` +
     `- Always third person — "Harold thinks...", "Harold is unmoved." — never "I"\n` +
-    `- Harold judges. He does not comfort or moralize. He is a cat.\n` +
-    `- Vary tone: try cutting/judgmental, absurdly deadpan, and unexpectedly profound.\n` +
+    `- Vary tone across the three variations within the direction above.\n` +
     `- No hashtags, emojis, or filler.\n` +
     `- Do NOT use the word "sunbeam" or reference sunbeams.\n` +
-    `- Replace any real names with "the caller".`;
+    `- Replace any real names with "the caller".\n` +
+    `- Follow the Tone direction above. The default Harold is dry/cutting — only deviate if the direction asks for it.`;
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -520,7 +554,7 @@ router.post('/api/generate-post', adminAuth, async (req, res) => {
 // ── Generate full synthetic call script ──────────────────────────────────────
 router.post('/api/generate-script', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
-  const { callType, callerPersona, mood, scenario } = req.body;
+  const { callType, callerPersona, mood, scenario, tone, toneNote } = req.body;
   if (!callType || !callerPersona || !mood) return res.status(400).json({ error: 'callType, callerPersona, and mood are required' });
 
   const callTypeLabels = {
@@ -552,6 +586,7 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
   const scenarioBlock = scenario && scenario.trim()
     ? `Specific scenario / extra context (incorporate this faithfully):\n"${scenario.trim()}"\n\n`
     : '';
+  const toneBlock = buildToneInstructions(tone, toneNote);
 
   const prompt =
     `You are writing a script for Harold's Hotline — a real cat hotline where callers leave voicemails for Harold, a ruthlessly judgmental tabby cat.\n\n` +
@@ -559,15 +594,17 @@ router.post('/api/generate-script', adminAuth, async (req, res) => {
     `Caller persona: ${personaLabels[callerPersona] || callerPersona}\n` +
     `Mood: ${moodLabels[mood] || mood}\n\n` +
     scenarioBlock +
-    `Return ONLY valid JSON (no markdown, no explanation):\n` +
+    toneBlock +
+    `\nReturn ONLY valid JSON (no markdown, no explanation):\n` +
     `{\n` +
     `  "callerScript": "What the caller says. Sound like a real voicemail — a little nervous, specific, conversational. 2-4 sentences. Natural filler words where appropriate. For confessions: specific and cringeworthy, not vague.",\n` +
     `  "haroldVariations": ["first response", "second response", "third response"],\n` +
     `  "scene": "1-2 sentence description for a realistic photo of a tabby cat matching the mood — natural setting, no props, no text."\n` +
     `}\n\n` +
-    `Rules for haroldVariations: EXACTLY 3 items. Each: 1-2 sentences, under 35 words, always third person ("Harold...", never "I"). ` +
-    `Vary tone across the three — e.g. cutting/judgmental, absurdly matter-of-fact, and unexpectedly profound. ` +
-    `Do NOT use the word "sunbeam" or reference sunbeams in any variation.`;
+    `Rules for haroldVariations: EXACTLY 3 items. Always third person ("Harold...", never "I"). ` +
+    `Vary tone across the three within the Tone direction above. ` +
+    `Do NOT use the word "sunbeam" or reference sunbeams in any variation. ` +
+    `Follow the Tone direction. The default Harold is dry and cutting — only deviate when the direction asks for it.`;
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

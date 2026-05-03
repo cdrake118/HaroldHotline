@@ -43,6 +43,15 @@ Always either:
 - Use the curly apostrophe `’` (U+2019) in literal text — `'Harold’s Hotline'`, not `"Harold's Hotline"`.
 - Use `buildTimedCaptions` for any user-supplied text — it already replaces `'` with U+2019 and escapes `:` and `\`.
 
+## Meta publishing (Instagram Reels + Facebook Page)
+
+- `routes/publish.js` owns the queue. Mounted at `/api/publish/*` directly (not under `/studio`) so the public `/studio-videos/<uuid>.mp4` URLs Meta fetches stay simple.
+- Required env vars on Railway: `META_ACCESS_TOKEN` (long-lived Page token from `/me/accounts`), `META_PAGE_ID`, `META_IG_USER_ID`, plus `BASE_URL` so Meta can fetch the video.
+- Scheduler is a single `setInterval` started from `server.js` via `publish.startScheduler()`. One Railway worker only — if we scale out, switch to a row-level lock.
+- IG Reels = 2-step flow: `POST /{ig-user-id}/media` (`media_type=REELS`, `video_url`) → poll `status_code=FINISHED` → `POST /{ig-user-id}/media_publish`. FB = single `POST /{page-id}/videos` with `file_url`.
+- Rendered videos land in `public/studio-videos/<uuid>.mp4` (`STUDIO_VIDEOS_DIR` env overrides). Files for posted jobs are cleaned 7 days after success.
+- `express.json` limit is 40mb because the studio re-uploads the rendered base64 mp4 to `/api/publish`.
+
 ## Things to avoid
 
 - Don't add new npm packages without a clear reason; the codebase deliberately stays close to stdlib (manual cookie parsing, no `cookie-parser`; manual SSE/polling, no `socket.io`).
