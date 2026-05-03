@@ -515,7 +515,7 @@ router.post('/api/generate-response', adminAuth, async (req, res) => {
 // ── Generate social media post caption ───────────────────────────────────────
 router.post('/api/generate-post', adminAuth, async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
-  const { callerScript, haroldResponse, callType, isSynthetic } = req.body;
+  const { callerScript, haroldResponse, callType, isSynthetic, wisdomText } = req.body;
   if (!haroldResponse) return res.status(400).json({ error: 'haroldResponse required' });
 
   const typeLabels = {
@@ -525,18 +525,38 @@ router.post('/api/generate-post', adminAuth, async (req, res) => {
     meandering: 'meandering call',
   };
   const typeLabel = typeLabels[callType] || 'message';
-  const callerPart = callerScript ? `Caller's message:\n"${callerScript.slice(0, 300)}"\n\n` : '';
 
-  const prompt =
-    `You are the social media manager for Harold's Hotline — a phone hotline where people call Harold, a very judgmental tabby cat. Harold cannot speak; he only meows.\n\n` +
-    `This is ${isSynthetic ? 'a scripted call' : 'a real caller'} (${typeLabel}).\n\n` +
-    `${callerPart}Harold's response:\n"${haroldResponse}"\n\n` +
-    `Write a short, charming Instagram/TikTok caption. Rules:\n` +
-    `- Under 150 words\n` +
-    `- Write from Harold's social media team perspective\n` +
-    `- Include Harold's implied cat reaction (unimpressed, napping, mildly judgmental)\n` +
-    `- If a real name is in the caller's message, replace it with "a caller" or "someone"\n` +
-    `- End with 3-5 hashtags including #HaroldsHotline and #HaroldTheCat`;
+  // Wisdom captions get a tight, distinct shape: restate the wisdom verbatim,
+  // then a single short sentence from Harold's social team, then hashtags.
+  // The free-form caption template wandered too far from the source wisdom.
+  let prompt;
+  if (callType === 'wisdom' && (wisdomText || haroldResponse)) {
+    const text = (wisdomText || haroldResponse).trim();
+    prompt =
+      `You are the social media manager for Harold's Hotline. Harold is a judgmental tabby cat who shares wisdom for humans.\n\n` +
+      `Today's wisdom from Harold:\n"${text}"\n\n` +
+      `Write an Instagram/TikTok caption with EXACTLY this structure:\n` +
+      `1. The wisdom, restated verbatim (or with only minor punctuation tweaks).\n` +
+      `2. ONE additional sentence — a short, dry, Harold-flavored aside (under 18 words).\n` +
+      `3. 3-5 hashtags on the last line, including #HaroldsHotline and #HaroldTheCat.\n\n` +
+      `Rules:\n` +
+      `- Do not paraphrase or rewrite the wisdom — quote it as given.\n` +
+      `- No preamble before the wisdom. Start with the wisdom itself.\n` +
+      `- The added sentence is one sentence, not a paragraph. No emojis in it.\n` +
+      `- Total caption under 80 words.`;
+  } else {
+    const callerPart = callerScript ? `Caller's message:\n"${callerScript.slice(0, 300)}"\n\n` : '';
+    prompt =
+      `You are the social media manager for Harold's Hotline — a phone hotline where people call Harold, a very judgmental tabby cat. Harold cannot speak; he only meows.\n\n` +
+      `This is ${isSynthetic ? 'a scripted call' : 'a real caller'} (${typeLabel}).\n\n` +
+      `${callerPart}Harold's response:\n"${haroldResponse}"\n\n` +
+      `Write a short, charming Instagram/TikTok caption. Rules:\n` +
+      `- Under 150 words\n` +
+      `- Write from Harold's social media team perspective\n` +
+      `- Include Harold's implied cat reaction (unimpressed, napping, mildly judgmental)\n` +
+      `- If a real name is in the caller's message, replace it with "a caller" or "someone"\n` +
+      `- End with 3-5 hashtags including #HaroldsHotline and #HaroldTheCat`;
+  }
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

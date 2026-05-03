@@ -1764,6 +1764,7 @@
       body: JSON.stringify({
         callerScript, haroldResponse, callType,
         isSynthetic: isSyntheticMode(),
+        wisdomText: isWisdomMode() ? state.wisdomText : null,
       }),
     });
     btn.disabled = false; btn.textContent = '✍️ Generate Caption';
