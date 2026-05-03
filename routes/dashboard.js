@@ -51,7 +51,7 @@ router.get('/api/debug', (req, res) => {
 // -- REST API ------------------------------------------------------------------
 
 router.get('/api/stats', adminAuth, (req, res) => {
-  res.json(db.stats());
+  res.json({ ...db.stats(), studio_queue: db.countQueued() });
 });
 
 router.get('/api/stats/daily', adminAuth, (req, res) => {
@@ -90,9 +90,10 @@ router.get('/api/calls', adminAuth, (req, res) => {
   const callType     = req.query.type || null;
   const dateFrom     = req.query.from || null;
   const dateTo       = req.query.to   || null;
+  const studioQueue  = req.query.queue === '1';
 
-  const calls = db.listCallsFiltered({ limit, offset, hasRecording, callType, dateFrom, dateTo });
-  const total = db.countCallsFiltered({ hasRecording, callType, dateFrom, dateTo });
+  const calls = db.listCallsFiltered({ limit, offset, hasRecording, callType, dateFrom, dateTo, studioQueue });
+  const total = db.countCallsFiltered({ hasRecording, callType, dateFrom, dateTo, studioQueue });
   res.json({ calls, total, limit, offset });
 });
 
@@ -549,6 +550,14 @@ router.patch('/api/calls/:id/flag', adminAuth, (req, res) => {
   const newFlagged = call.flagged ? 0 : 1;
   db.flagCall(call.id, newFlagged);
   res.json({ flagged: newFlagged });
+});
+
+router.patch('/api/calls/:id/queue', adminAuth, (req, res) => {
+  const call = db.getCallById(parseInt(req.params.id, 10));
+  if (!call) return res.status(404).json({ error: 'Not found' });
+  const newQueued = call.studio_queue ? 0 : 1;
+  db.queueCall(call.id, newQueued);
+  res.json({ studio_queue: newQueued });
 });
 
 router.delete('/api/calls/:id/recording', adminAuth, async (req, res) => {

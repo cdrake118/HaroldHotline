@@ -89,6 +89,7 @@ db.exec(`
 try { db.exec(`ALTER TABLE calls ADD COLUMN flagged INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN wisdom_text TEXT`); } catch (_) {}
 try { db.exec(`ALTER TABLE calls ADD COLUMN harold_response TEXT`); } catch (_) {}
+try { db.exec(`ALTER TABLE calls ADD COLUMN studio_queue INTEGER DEFAULT 0`); } catch (_) {}
 try { db.exec(`ALTER TABLE page_views ADD COLUMN country TEXT`); } catch (_) {}
 try { db.exec(`ALTER TABLE page_views ADD COLUMN city TEXT`); } catch (_) {}
 
@@ -125,7 +126,9 @@ const stmts = {
   getCall:    db.prepare(`SELECT * FROM calls WHERE call_sid = ?`),
   getCallById: db.prepare(`SELECT * FROM calls WHERE id = ?`),
 
-  flagCall: db.prepare(`UPDATE calls SET flagged = @flagged WHERE id = @id`),
+  flagCall:       db.prepare(`UPDATE calls SET flagged       = @flagged      WHERE id = @id`),
+  queueCall:      db.prepare(`UPDATE calls SET studio_queue  = @studioQueue  WHERE id = @id`),
+  countQueued:    db.prepare(`SELECT COUNT(*) as count FROM calls WHERE studio_queue = 1`),
 
   clearRecording: db.prepare(`
     UPDATE calls SET recording_url = NULL, recording_sid = NULL,
@@ -254,11 +257,12 @@ const stmts = {
 
 // Dynamic query helpers (can't be pre-prepared due to variable WHERE clauses)
 function buildCallsQuery(opts, countOnly = false) {
-  const { hasRecording = false, callType = null, dateFrom = null, dateTo = null } = opts;
+  const { hasRecording = false, callType = null, dateFrom = null, dateTo = null, studioQueue = false } = opts;
   const conditions = [];
   const params = [];
 
   if (hasRecording) conditions.push('c.recording_url IS NOT NULL');
+  if (studioQueue)  conditions.push('c.studio_queue = 1');
   if (callType)    { conditions.push('c.call_type = ?');                params.push(callType); }
   if (dateFrom)    { conditions.push("date(c.created_at) >= date(?)");  params.push(dateFrom); }
   if (dateTo)      { conditions.push("date(c.created_at) <= date(?)");  params.push(dateTo); }
@@ -300,8 +304,10 @@ module.exports = {
   updateTranscriptByRecordingSid: (recordingSid, transcript, transcriptStatus) =>
     stmts.updateTranscriptByRecordingSid.run({ recordingSid, transcript, transcriptStatus }),
 
-  flagCall: (id, flagged) => stmts.flagCall.run({ id, flagged }),
-  clearRecording: (id)    => stmts.clearRecording.run({ id }),
+  flagCall:    (id, flagged)      => stmts.flagCall.run({ id, flagged }),
+  queueCall:   (id, studioQueue) => stmts.queueCall.run({ id, studioQueue }),
+  countQueued: ()                => stmts.countQueued.get().count,
+  clearRecording: (id)           => stmts.clearRecording.run({ id }),
 
   getCall: (callSid)       => stmts.getCall.get(callSid),
   getCallById: (id)        => stmts.getCallById.get(id),

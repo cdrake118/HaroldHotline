@@ -194,6 +194,23 @@
     tr.flagged-row td { background: #fff1f2; }
     tr.flagged-row:hover td { background: #ffe4e6; }
 
+    /* -- Queued rows ------------------------------------------------------- */
+    tr.queued-row td { background: #f0fdf4; }
+    tr.queued-row:hover td { background: #dcfce7; }
+    tr.queued-row.expanded td { background: #dcfce7; }
+    .queue-badge {
+      display: inline-block;
+      background: #dcfce7;
+      color: #166534;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: .1rem .45rem;
+      border-radius: 999px;
+      margin-left: .35rem;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+
     /* -- Generated post ---------------------------------------------------- */
     .generated-post {
       margin-top: 1rem;
@@ -575,6 +592,10 @@
   <div class="stat-card"><div class="value" id="stat-questions">—</div><div class="label">Advice Sought</div></div>
   <div class="stat-card"><div class="value" id="stat-wisdom">—</div><div class="label">Wisdom Seekers</div></div>
   <div class="stat-card"><div class="value" id="stat-recordings">—</div><div class="label">Recordings</div></div>
+  <div class="stat-card" style="cursor:pointer;border-color:#86efac" onclick="enableQueueFilter()" title="Click to filter by queue">
+    <div class="value" id="stat-queue" style="color:#166534">—</div>
+    <div class="label">🎬 In Queue</div>
+  </div>
 </section>
 
 <section class="chart-section">
@@ -718,6 +739,7 @@
     <h2>Recent Calls</h2>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="refresh-btn" id="btn-filter-recording" onclick="toggleRecordingFilter()" title="Show only calls with a recording">🎙 Has Recording</button>
+      <button class="refresh-btn" id="btn-filter-queue" onclick="toggleQueueFilter()" title="Show only calls tagged for the studio">🎬 Queue</button>
       <button class="refresh-btn" onclick="refreshAll()" title="Refresh stats, chart, and calls">↻ Refresh</button>
     </div>
   </div>
@@ -767,6 +789,7 @@
   let currentOffset = 0;
   let totalCalls = 0;
   let filterRecording = false;
+  let filterQueue = false;
   let searchQuery = '';
   let searchDebounce = null;
 
@@ -774,6 +797,18 @@
     filterRecording = !filterRecording;
     document.getElementById('btn-filter-recording').classList.toggle('active', filterRecording);
     loadCalls(0);
+  }
+
+  function toggleQueueFilter() {
+    filterQueue = !filterQueue;
+    document.getElementById('btn-filter-queue').classList.toggle('active', filterQueue);
+    loadCalls(0);
+  }
+
+  function enableQueueFilter() {
+    if (!filterQueue) { filterQueue = true; document.getElementById('btn-filter-queue').classList.add('active'); }
+    loadCalls(0);
+    document.getElementById('calls-section-anchor')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   function onFilterChange() { loadCalls(0); }
@@ -793,7 +828,9 @@
     document.getElementById('filter-type').value = '';
     searchQuery = '';
     filterRecording = false;
+    filterQueue = false;
     document.getElementById('btn-filter-recording').classList.remove('active');
+    document.getElementById('btn-filter-queue').classList.remove('active');
     loadCalls(0);
   }
 
@@ -908,6 +945,7 @@
     document.getElementById('stat-questions').textContent   = s.questions ?? 0;
     document.getElementById('stat-wisdom').textContent      = s.wisdom_calls ?? 0;
     document.getElementById('stat-recordings').textContent  = s.recordings ?? 0;
+    document.getElementById('stat-queue').textContent       = s.studio_queue ?? 0;
   }
 
   async function loadCalls(offset = 0) {
@@ -917,6 +955,7 @@
 
     const params = new URLSearchParams({ limit: PAGE_SIZE, offset });
     if (filterRecording) params.set('hasRecording', '1');
+    if (filterQueue)     params.set('queue', '1');
 
     let url;
     if (searchQuery) {
@@ -961,8 +1000,8 @@
     });
 
     tbody.innerHTML = calls.map((call, i) => `
-      <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : ''}">
-        <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}</td>
+      <tr onclick="toggleDetail(${call.id})" id="row-${call.id}" class="${call.flagged ? 'flagged-row' : call.studio_queue ? 'queued-row' : ''}">
+        <td data-label="#">${offset + i + 1}${call.flagged ? ' 🚩' : ''}${call.studio_queue ? ' 🎬' : ''}</td>
         <td data-label="Date">${formatDate(call.created_at)}</td>
         <td data-label="Caller" style="font-family:monospace;font-size:.85rem">${maskNumber(call.caller_number)}${call.caller_call_count > 1 ? `<span class="returning-badge">↻ ${call.caller_call_count}×</span>` : ''}${callerLocation(call.caller_number) ? `<br><span style="font-family:system-ui;font-size:.72rem;color:var(--muted)">${callerLocation(call.caller_number)}</span>` : ''}</td>
         <td data-label="Type">${typeBadge(call.call_type)}</td>
@@ -995,6 +1034,9 @@
             </div>
           </div>
           <div class="admin-actions">
+            <button class="admin-btn ${call.studio_queue ? 'queued-btn' : ''}" onclick="event.stopPropagation();adminQueueCall(${call.id})" style="${call.studio_queue ? 'border-color:#86efac;background:#f0fdf4;color:#166534' : ''}">
+              🎬 ${call.studio_queue ? 'Remove from Queue' : 'Add to Queue'}
+            </button>
             <button class="admin-btn ${call.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();adminFlagCall(${call.id})">
               🚩 ${call.flagged ? 'Unflag' : 'Flag'} call
             </button>
@@ -1119,6 +1161,11 @@
   async function adminFlagCall(id) {
     const res = await adminFetch(`/dashboard/api/calls/${id}/flag`, { method: 'PATCH' });
     if (res && res.ok) loadCalls(currentOffset);
+  }
+
+  async function adminQueueCall(id) {
+    const res = await adminFetch(`/dashboard/api/calls/${id}/queue`, { method: 'PATCH' });
+    if (res && res.ok) { loadCalls(currentOffset); loadStats(); }
   }
 
   async function adminDeleteRecording(id) {
